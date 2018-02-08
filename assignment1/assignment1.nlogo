@@ -1,5 +1,5 @@
 ;; GLOBALS
-globals [ dirt-color ]
+globals [ dirt-color dirt-coords ]
 
 ;; STANDARD FUNCTIONS
 
@@ -7,20 +7,22 @@ to setup
   clear-all
 
   ;; Set globals
-  set dirt-color 35
+  set dirt-color 38
+  set dirt-coords []
 
   ;; Init patches
   init-patches
   spread-dirt
 
   ;; Init vacuum
-  ;; TODO
+  init-vacuum
 
   reset-ticks
 end
 
 to go
-  ;; TODO
+  move-vacuum
+  pick-up-dirt
   tick
 end
 
@@ -33,10 +35,35 @@ end
 
 to spread-dirt
   ;; Determine which patches will be dirty
+
   while [ count patches with [pcolor = dirt-color] < n-dirty ] [
-    ask patch random-pxcor random-pycor [ set pcolor dirt-color ]
+    let x_cor random-pxcor
+    let y_cor random-pycor
+    ask patch x_cor y_cor [ set pcolor dirt-color ]  ;; Make the corresponding patch dirty
+    set dirt-coords fput (list int x_cor int y_cor) dirt-coords  ;; Add it to a list in order to be used by the vacuum later
   ]
 end
+
+to init-vacuum
+  ;; Set the vacuum cleaner on a random position on the grid
+  create-turtles 1
+  ask turtles [ setxy random-xcor random-ycor ]
+  ask turtles [ set color 14 ]
+  ask turtles [ set size 2 ]
+  ask turtles [ set shape "pentagon" ]
+end
+
+to move-vacuum
+  ;; Move the vacuum into the direction of the next dirty patch
+  ;; TODO
+end
+
+to pick-up-dirt
+  ;; Have the vacuum pick up dirt in case it stands on a dirty patch
+  ;; TODO
+end
+
+
 @#$#@#$#@
 GRAPHICS-WINDOW
 698
