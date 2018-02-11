@@ -1,7 +1,7 @@
 ;; GLOBALS
 breed [ garbages garbage ]
 breed [ vacuums vacuum ]
-globals [ dirt-color dirt-coords dirt-index sorted-dirt-coords garbage-patch ]
+globals [ dirt-color dirt-coords sorted-dirt-coords garbage-patch ]
 turtles-own [ bag-capacity beliefs current-patch ]  ;; Coordinates of next dirty patches to clean up (or garbage can)
 
 ;; STANDARD FUNCTIONS
@@ -13,7 +13,6 @@ to setup
   set dirt-color 38
   set dirt-coords []
   set sorted-dirt-coords []
-  set dirt-index 0
 
   ;; Init patches
   init-patches
@@ -44,7 +43,6 @@ end
 
 to spread-dirt
   ;; Determine which patches will be dirty
-
   while [ count patches with [pcolor = dirt-color] < n-dirty ] [
     let x-cor random-pxcor
     let y-cor random-pycor
@@ -74,8 +72,33 @@ to init-vacuum
     set color 14
     set size 2
     set shape "pentagon"
+
+    ;; Init initial belief
     set beliefs sort-by [ [p1 p2] -> distance p1 < distance p2 ] dirt-coords
-    set current-patch item dirt-index beliefs
+
+    print "Initial beliefs"
+    print beliefs
+
+    print "Remove initial belief"
+    set current-patch item 0 beliefs
+    set beliefs remove-item 0 beliefs
+
+    print "Initial belief"
+    print current-patch
+  ]
+end
+
+to set-belief
+  print "Set next belief"
+  ask vacuums [
+    print "Sorting beliefs by proximity"
+    set beliefs sort-by [ [p1 p2] -> distance p1 < distance p2 ] beliefs
+    print beliefs
+    set current-patch item 0 beliefs
+    set beliefs remove-item 0 beliefs
+
+    print "Next belief"
+    print current-patch
   ]
 end
 
@@ -85,6 +108,7 @@ to move-vacuum
     ;; If dirty patch hasn't been reached yet
     if not any? vacuums-on current-patch
       [
+        print "Move 1"
         face current-patch
         fd 1
       ]
@@ -95,26 +119,28 @@ to pick-up-dirt
   ;; Have the vacuum pick up dirt in case it stands on a dirty patch
   ask vacuums [
     ;; If dirty patch hasn't been reached yet
+    print "Picking up dirt?"
     if any? vacuums-on current-patch and [ pcolor ] of current-patch = dirt-color [
       ask current-patch [ set pcolor 9 ]  ;; Remove dirt
       set bag-capacity bag-capacity - 1
-      set dirt-index dirt-index + 1
+
+      print "Picking up dirt, capacity:"
+      print bag-capacity
 
       ifelse bag-capacity = 0
-      [ set current-patch garbage-patch ]  ;; Vacuum bag full, find garbage can
-      [ set current-patch item dirt-index beliefs ]  ;; Prepare to clean next patch
-      ;; TODO: Resort list every time a garbage patch is cleaned and pop elements
+      [ set current-patch garbage-patch ] ;; Vacuum bag full, find garbage can
+      [ set-belief ] ;; Prepare to clean next patch
     ]
   ]
 end
 
 to empty-bag
   ;; Empty the vacuum's bag if it's stading on the garbage can
-
   ask vacuums [
     if any? vacuums-on garbage-patch and current-patch = garbage-patch [
+      print "Empty bag"
       set bag-capacity 5  ;; TODO: Use bag capacity determined by slider
-      set current-patch item dirt-index beliefs
+      set-belief
     ]
   ]
 end
