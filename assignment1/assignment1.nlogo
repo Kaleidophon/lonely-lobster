@@ -1,5 +1,6 @@
 ;; GLOBALS
-globals [ dirt-color dirt-coords ]
+globals [ dirt-color dirt-coords dirt-index sorted-dirt-coords ]
+turtles-own [ bag-capacity beliefs current-patch ]  ;; Coordinates of next dirty patches to clean up (or garbage can)
 
 ;; STANDARD FUNCTIONS
 
@@ -9,6 +10,8 @@ to setup
   ;; Set globals
   set dirt-color 38
   set dirt-coords []
+  set sorted-dirt-coords []
+  set dirt-index 0
 
   ;; Init patches
   init-patches
@@ -17,12 +20,16 @@ to setup
   ;; Init vacuum
   init-vacuum
 
+  ;; Init garbage
+  init-garbage
+
   reset-ticks
 end
 
 to go
   move-vacuum
   pick-up-dirt
+  empty-bag
   tick
 end
 
@@ -37,33 +44,49 @@ to spread-dirt
   ;; Determine which patches will be dirty
 
   while [ count patches with [pcolor = dirt-color] < n-dirty ] [
-    let x_cor random-pxcor
-    let y_cor random-pycor
-    ask patch x_cor y_cor [ set pcolor dirt-color ]  ;; Make the corresponding patch dirty
-    set dirt-coords fput (list int x_cor int y_cor) dirt-coords  ;; Add it to a list in order to be used by the vacuum later
+    let x-cor random-pxcor
+    let y-cor random-pycor
+    ask patch x-cor y-cor [ set pcolor dirt-color ]  ;; Make the corresponding patch dirty
+    set dirt-coords fput patch x-cor y-cor dirt-coords  ;; Add it to a list in order to be used by the vacuum later
   ]
+end
+
+to init-garbage
+  ;; Initialize the carbage can
+  ;; TODO
 end
 
 to init-vacuum
   ;; Set the vacuum cleaner on a random position on the grid
   create-turtles 1
+  ask turtles [ set bag-capacity 5 ]
   ask turtles [ setxy random-xcor random-ycor ]
   ask turtles [ set color 14 ]
   ask turtles [ set size 2 ]
   ask turtles [ set shape "pentagon" ]
+  ask turtles [ set beliefs sort-by [ [p1 p2] -> distance p1 < distance p2 ] dirt-coords ]
 end
 
 to move-vacuum
   ;; Move the vacuum into the direction of the next dirty patch
-  ;; TODO
+  ask turtles [ set current-patch item dirt-index beliefs ]
+  ask turtles [ move-to current-patch ]
+  ;; TODO: Move vacuum into direction of target
+  ;; TODO: Determine target by checking bag or removing the next dirty patch from the list
+  ;; TODO: Only move if you're not already stading on the target
 end
 
 to pick-up-dirt
   ;; Have the vacuum pick up dirt in case it stands on a dirty patch
-  ;; TODO
+  ;; TODO: Pick up the dirt, remove color from path
+  ;; TODO: Decrement capacity by 1
 end
 
-
+to empty-bag
+  ;; Empty the vacuum's bag if it's stading on the garbage can
+  ;; TODO: Check whether on garbage can
+  ;; TODO: Empty
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
 698
