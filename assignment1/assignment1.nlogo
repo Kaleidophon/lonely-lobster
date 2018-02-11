@@ -56,10 +56,13 @@ end
 to init-garbage
   ;; Initialize the carbage can
   create-garbages 1 [
-    setxy random-xcor random-ycor
+    let x-cor random-xcor
+    let y-cor random-ycor
+    setxy x-cor y-cor
+    set garbage-patch patch x-cor y-cor
     set size 2
     set shape "x"
-    set color 98
+    set color 95
   ]
 end
 
@@ -86,31 +89,34 @@ to move-vacuum
         fd 1
       ]
   ]
-  ;; TODO: Determine target by checking bag or removing the next dirty patch from the list
-  ;; TODO: Only move if you're not already stading on the target
 end
 
 to pick-up-dirt
   ;; Have the vacuum pick up dirt in case it stands on a dirty patch
   ask vacuums [
     ;; If dirty patch hasn't been reached yet
-    if any? vacuums-on current-patch and [ pcolor ] of current-patch = dirt-color
-      [
-        ask current-patch [ set pcolor 9 ]  ;; Remove dirt
-        set bag-capacity bag-capacity - 1
-        set dirt-index dirt-index + 1
+    if any? vacuums-on current-patch and [ pcolor ] of current-patch = dirt-color [
+      ask current-patch [ set pcolor 9 ]  ;; Remove dirt
+      set bag-capacity bag-capacity - 1
+      set dirt-index dirt-index + 1
 
-        ifelse bag-capacity = 0
-        [ set current-patch garbage-patch ]  ;; Vacuum bag full, find garbage can
-        [ set current-patch item dirt-index beliefs ]  ;; Prepare to clean next patch
-      ]
+      ifelse bag-capacity = 0
+      [ set current-patch garbage-patch ]  ;; Vacuum bag full, find garbage can
+      [ set current-patch item dirt-index beliefs ]  ;; Prepare to clean next patch
+      ;; TODO: Resort list every time a garbage patch is cleaned and pop elements
+    ]
   ]
 end
 
 to empty-bag
   ;; Empty the vacuum's bag if it's stading on the garbage can
-  ;; TODO: Check whether on garbage can
-  ;; TODO: Empty
+
+  ask vacuums [
+    if any? vacuums-on garbage-patch and current-patch = garbage-patch [
+      set bag-capacity 5  ;; TODO: Use bag capacity determined by slider
+      set current-patch item dirt-index beliefs
+    ]
+  ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
