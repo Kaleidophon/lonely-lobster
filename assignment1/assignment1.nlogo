@@ -1,5 +1,7 @@
 ;; GLOBALS
-globals [ dirt-color dirt-coords dirt-index sorted-dirt-coords ]
+breed [ garbages garbage ]
+breed [ vacuums vacuum ]
+globals [ dirt-color dirt-coords dirt-index sorted-dirt-coords garbage-patch ]
 turtles-own [ bag-capacity beliefs current-patch ]  ;; Coordinates of next dirty patches to clean up (or garbage can)
 
 ;; STANDARD FUNCTIONS
@@ -53,36 +55,56 @@ end
 
 to init-garbage
   ;; Initialize the carbage can
-  ;; TODO
+  create-garbages 1 [
+    setxy random-xcor random-ycor
+    set size 2
+    set shape "x"
+    set color 98
+  ]
 end
 
 to init-vacuum
   ;; Set the vacuum cleaner on a random position on the grid
-  create-turtles 1
-  ask turtles [ set bag-capacity 5 ]
-  ask turtles [ setxy random-xcor random-ycor ]
-  ask turtles [ set color 14 ]
-  ask turtles [ set size 2 ]
-  ask turtles [ set shape "pentagon" ]
-  ask turtles [ set beliefs sort-by [ [p1 p2] -> distance p1 < distance p2 ] dirt-coords ]
+  create-vacuums 1 [
+    set bag-capacity 5
+    setxy random-xcor random-ycor
+    set color 14
+    set size 2
+    set shape "pentagon"
+    set beliefs sort-by [ [p1 p2] -> distance p1 < distance p2 ] dirt-coords
+    set current-patch item dirt-index beliefs
+  ]
 end
 
 to move-vacuum
   ;; Move the vacuum into the direction of the next dirty patch
-  ask turtles [
-    set current-patch item dirt-index beliefs
-    face current-patch
-    fd 1
+  ask vacuums [
+    ;; If dirty patch hasn't been reached yet
+    if not any? vacuums-on current-patch
+      [
+        face current-patch
+        fd 1
+      ]
   ]
-  ;; TODO: Move vacuum into direction of target
   ;; TODO: Determine target by checking bag or removing the next dirty patch from the list
   ;; TODO: Only move if you're not already stading on the target
 end
 
 to pick-up-dirt
   ;; Have the vacuum pick up dirt in case it stands on a dirty patch
-  ;; TODO: Pick up the dirt, remove color from path
-  ;; TODO: Decrement capacity by 1
+  ask vacuums [
+    ;; If dirty patch hasn't been reached yet
+    if any? vacuums-on current-patch and [ pcolor ] of current-patch = dirt-color
+      [
+        ask current-patch [ set pcolor 9 ]  ;; Remove dirt
+        set bag-capacity bag-capacity - 1
+        set dirt-index dirt-index + 1
+
+        ifelse bag-capacity = 0
+        [ set current-patch garbage-patch ]  ;; Vacuum bag full, find garbage can
+        [ set current-patch item dirt-index beliefs ]  ;; Prepare to clean next patch
+      ]
+  ]
 end
 
 to empty-bag
@@ -105,8 +127,8 @@ GRAPHICS-WINDOW
 1
 1
 0
-1
-1
+0
+0
 1
 -16
 16
