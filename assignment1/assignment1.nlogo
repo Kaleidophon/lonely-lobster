@@ -69,8 +69,11 @@ end
 
 to move-vacuum
   ;; Move the vacuum into the direction of the next dirty patch
-  ask turtles [ set current-patch item dirt-index beliefs ]
-  ask turtles [ move-to current-patch ]
+  ask turtles [
+    set current-patch item dirt-index beliefs
+    face current-patch
+    fd 1
+  ]
   ;; TODO: Move vacuum into direction of target
   ;; TODO: Determine target by checking bag or removing the next dirty patch from the list
   ;; TODO: Only move if you're not already stading on the target
