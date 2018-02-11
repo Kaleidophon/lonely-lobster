@@ -2,7 +2,7 @@
 breed [ garbages garbage ]
 breed [ vacuums vacuum ]
 globals [ dirt-color dirt-coords sorted-dirt-coords garbage-patch ]
-turtles-own [ bag-capacity beliefs current-patch ]  ;; Coordinates of next dirty patches to clean up (or garbage can)
+vacuums-own [ bag-capacity beliefs intention ]  ;; Coordinates of next dirty patches to clean up (or garbage can)
 
 ;; STANDARD FUNCTIONS
 
@@ -28,6 +28,13 @@ to setup
 end
 
 to go
+  ;; Termination criterion
+  if all? patches [pcolor = 9] and any? vacuums-on garbage-patch
+  [
+     print "Cleaning is done!"
+     stop
+  ]
+
   move-vacuum
   pick-up-dirt
   empty-bag
@@ -46,8 +53,12 @@ to spread-dirt
   while [ count patches with [pcolor = dirt-color] < n-dirty ] [
     let x-cor random-pxcor
     let y-cor random-pycor
-    ask patch x-cor y-cor [ set pcolor dirt-color ]  ;; Make the corresponding patch dirty
-    set dirt-coords fput patch x-cor y-cor dirt-coords  ;; Add it to a list in order to be used by the vacuum later
+
+    ;; Check whether this patch has been "spoiled" yet
+    if [ pcolor ] of patch x-cor y-cor != dirt-color [
+      ask patch x-cor y-cor [ set pcolor dirt-color ]  ;; Make the corresponding patch dirty
+      set dirt-coords fput patch x-cor y-cor dirt-coords  ;; Add it to a list in order to be used by the vacuum later
+    ]
   ]
 end
 
@@ -67,80 +78,65 @@ end
 to init-vacuum
   ;; Set the vacuum cleaner on a random position on the grid
   create-vacuums 1 [
-    set bag-capacity 5
+    set bag-capacity max-bag-capacity
     setxy random-xcor random-ycor
     set color 14
-    set size 2
-    set shape "pentagon"
+    ;;set size 1
+    set shape "arrow"
 
     ;; Init initial belief
     set beliefs sort-by [ [p1 p2] -> distance p1 < distance p2 ] dirt-coords
-
-    print "Initial beliefs"
-    print beliefs
-
-    print "Remove initial belief"
-    set current-patch item 0 beliefs
+    set intention item 0 beliefs
     set beliefs remove-item 0 beliefs
-
-    print "Initial belief"
-    print current-patch
   ]
 end
 
-to set-belief
-  print "Set next belief"
+to set-intention
+  ;; Set the next intention: Garbage can if bag is full, otherwise picking up more dirt
   ask vacuums [
-    print "Sorting beliefs by proximity"
-    set beliefs sort-by [ [p1 p2] -> distance p1 < distance p2 ] beliefs
-    print beliefs
-    set current-patch item 0 beliefs
-    set beliefs remove-item 0 beliefs
-
-    print "Next belief"
-    print current-patch
+    ifelse length beliefs = 0
+    [ set intention garbage-patch ]
+    [
+      set beliefs sort-by [ [p1 p2] -> distance p1 < distance p2 ] beliefs
+      set intention item 0 beliefs
+      set beliefs remove-item 0 beliefs
+    ]
   ]
 end
 
 to move-vacuum
-  ;; Move the vacuum into the direction of the next dirty patch
+  ;; Desire to move the vacuum into the direction of the next dirty patch
   ask vacuums [
     ;; If dirty patch hasn't been reached yet
-    if not any? vacuums-on current-patch
+    if not any? vacuums-on intention
       [
-        print "Move 1"
-        face current-patch
+        face intention
         fd 1
       ]
   ]
 end
 
 to pick-up-dirt
-  ;; Have the vacuum pick up dirt in case it stands on a dirty patch
+  ;; Desire to have the vacuum pick up dirt in case it stands on a dirty patch
   ask vacuums [
     ;; If dirty patch hasn't been reached yet
-    print "Picking up dirt?"
-    if any? vacuums-on current-patch and [ pcolor ] of current-patch = dirt-color [
-      ask current-patch [ set pcolor 9 ]  ;; Remove dirt
+    if any? vacuums-on intention and [ pcolor ] of intention = dirt-color [
+      ask intention [ set pcolor 9 ]  ;; Remove dirt
       set bag-capacity bag-capacity - 1
 
-      print "Picking up dirt, capacity:"
-      print bag-capacity
-
       ifelse bag-capacity = 0
-      [ set current-patch garbage-patch ] ;; Vacuum bag full, find garbage can
-      [ set-belief ] ;; Prepare to clean next patch
+      [ set intention garbage-patch ] ;; Vacuum bag full, find garbage can
+      [ set-intention ] ;; Prepare to clean next patch
     ]
   ]
 end
 
 to empty-bag
-  ;; Empty the vacuum's bag if it's stading on the garbage can
+  ;; Desire to empty the vacuum's bag if it's stading on the garbage can
   ask vacuums [
-    if any? vacuums-on garbage-patch and current-patch = garbage-patch [
-      print "Empty bag"
-      set bag-capacity 5  ;; TODO: Use bag capacity determined by slider
-      set-belief
+    if any? vacuums-on garbage-patch and intention = garbage-patch [
+      set bag-capacity max-bag-capacity
+      set-intention
     ]
   ]
 end
@@ -212,10 +208,44 @@ INPUTBOX
 481
 246
 n-dirty
-50.0
+150.0
 1
 0
 Number
+
+SLIDER
+419
+313
+591
+346
+max-bag-capacity
+max-bag-capacity
+0
+25
+14.0
+1
+1
+NIL
+HORIZONTAL
+
+PLOT
+172
+330
+372
+480
+Patches & Bag Capacity
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"Dirty Patches" 1.0 0 -2570826 true "" "plot count patches with [pcolor = dirt-color]"
+"Bag Capacity" 1.0 0 -13791810 true "" "plot sum [ bag-capacity ] of vacuums"
 
 @#$#@#$#@
 ## WHAT IS IT?
