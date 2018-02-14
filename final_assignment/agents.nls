@@ -20,14 +20,15 @@ globals [graph]
 
 to init-buses
   ; Initialize your agents here.
-  setxy random-xcor random-ycor
+;  setxy random-xcor random-ycor
   set itinerary []
-
+  set bus_type 3
+  
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
-  ; 4: Evertsenstraat, 5: Floradorp, 6: Haarlemmermeerstation, 7: Hasseltweg, 8: Hendrikkade,
-  ; 9: Leidseplein, 10: Lelylaan, 11: Muiderpoort, 12: Museumplein, 13: RAI, 14: SciencePark, 15: Sloterdijk,
-  ; 16: Surinameplein, 17: UvA, 18: VU, 19: Waterlooplein, 20: Weesperplein, 21: Wibautstraat, 22: Zuid
+  ; 5: Evertsenstraat, 6: Floradorp, 7: Haarlemmermeerstation, 8: Hasseltweg, 9: Hendrikkade,
+  ; 10: Leidseplein, 11: Lelylaan, 12: Muiderpoort, 13: Museumplein, 14: RAI, 15: SciencePark, 16: Sloterdijk,
+  ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
 
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
 end
@@ -36,25 +37,65 @@ to execute-actions
   ; Add decision making strategies for your agents here.
   ; You are allowed to use the global variable 'ticks'.
   ;; TODO: Add bus routines
-  print current_stop
-  print get-passengers-at-stop current_stop
+  if (length itinerary = 0) [
+      set itinerary generate-schedule
+  ]
+  if not (current_stop = -1) [
+    drop-off-passengers
+    pick-up-passengers
+    pick-next-stop
+  ]
+  travel-to next_stop
 end
 
 ;; CUSTOM FUNCTIONS
 
+to drop-off-passengers
+  ; Loop through list of passengers
+  foreach bus_passengers [
+    let id item 0 ?
+    let dest item 1 ?
+    
+    if dest = current_stop [
+      drop-off-passenger id
+      print "dropped off passenger: " 
+      print id
+    ]
+   ]
+  print "number of passengers currently in bus: " 
+  print length bus_passengers
+end
 
-to pick-destination
+to pick-up-passengers
+  let passengers_at_stop get-passengers-at-stop current_stop
+;  print "passengers at stop:"
+;  print passengers_at_stop
+  
+  ;; get [passenger-id destination] tuples at current stop
+  foreach passengers_at_stop [
+    let passenger_id item 0 ?
+    pick-up-passenger passenger_id
+  ]
+end
+
+to pick-next-stop
   ;; Pick the next destination of the bus
-  ;; TODO
+  ask buses [ 
+    set next_stop item 0 itinerary
+    set itinerary remove-item 0 itinerary
+  ]  
 end
 
 
 to-report generate-schedule
   ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
   ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
+  ;; dam leidseplein museumplein zuid rai zui vu amstelveenseweg haarlemmermeerstation museumplein leidseplein dam centraal
+  ;; sloterdijk lelylaan surinameplein evertsenstraat dam dcentraal
   report [ 
-    3 7 5 7 2 7 3 ; Amsterdam Noord
-    8 19 11 14 17 14 0 21 20 19 3 ; Amsterdam Oost / Zuid-Oost
-    9 12 22 13 22 18 1 6 16 10 15 4 3 ;; Amsterdam Zuid / West
+    9 8 6 8 2 8 9 3 ; Amsterdam Noord
+    20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost
+    4 10 13 23 14 23 19 1 7 13 10 4 3 ; Amsterdam Centrum/Zuid
+    16 11 17 5 4 3 ; Amsterdam West
   ]
 end
