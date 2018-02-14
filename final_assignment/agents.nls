@@ -21,7 +21,7 @@ globals [graph]
 to init-buses
   ; Initialize your agents here.
   setxy random-xcor random-ycor
-  set itinerary []
+  set itinerary generate-schedule
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
@@ -35,12 +35,35 @@ end
 to execute-actions
   ; Add decision making strategies for your agents here.
   ; You are allowed to use the global variable 'ticks'.
-  ;; TODO: Add bus routines
-  print current_stop
-  print get-passengers-at-stop current_stop
+  
+  ; Check if itinerary is finished, if yes recreate it
+  if length itinerary = 0 
+    [ set itinerary generate-schedule ]
+  
+  ifelse not current_stop = -1
+  ; Bus is at a station
+  [
+    drop-off-passengers-at-station
+    pick-up-passengers-at-station
+    pick-destination
+  ]
+  ; Bus is still on the road
+  [
+    travel-to next_stop
+  ]
 end
 
 ;; CUSTOM FUNCTIONS
+
+to drop-off-passengers-at-station
+  ;; Drop off all the passengers at station in case it's their destination.
+  ;; TODO
+end
+
+to pick-up-passengers-at-station
+  ;; Pick up all the passenger at a bus stop.
+  ;; TODO
+end
 
 
 to pick-destination
