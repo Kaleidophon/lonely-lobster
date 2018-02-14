@@ -60,6 +60,10 @@ def get_most_popular_rides(ride_frequencies: dict, n=10):
 
 
 def get_most_busy_routes(ride_frequencies: dict):
+    # TODO: Get distances between stations
+    # TODO: Find shortest path between two stations
+    # TODO: Calculate the number of passenger that travel along this route into a certain direction
+    # TODO: Draw graph with directed edges based on |#travelling into one dir - #travelling into other dir|
     pass
 
 
