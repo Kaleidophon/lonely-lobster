@@ -14,20 +14,22 @@ buses-own [
   ; New local variables for students.
   ; You can create any new local variable you want. Just declare them here.
   itinerary       ; List of next stations to visit
+  target-stop
 ]
  
 globals [graph]
 
 to init-buses
   ; Initialize your agents here.
-  setxy random-xcor random-ycor
+  add-bus 3
   set itinerary generate-schedule
+  pick-destination
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
-  ; 4: Evertsenstraat, 5: Floradorp, 6: Haarlemmermeerstation, 7: Hasseltweg, 8: Hendrikkade,
-  ; 9: Leidseplein, 10: Lelylaan, 11: Muiderpoort, 12: Museumplein, 13: RAI, 14: SciencePark, 15: Sloterdijk,
-  ; 16: Surinameplein, 17: UvA, 18: VU, 19: Waterlooplein, 20: Weesperplein, 21: Wibautstraat, 22: Zuid
+  ; 5: Evertsenstraat, 6: Floradorp, 7: Haarlemmermeerstation, 8: Hasseltweg, 9: Hendrikkade,
+  ; 10: Leidseplein, 11: Lelylaan, 12: Muiderpoort, 13: Museumplein, 14: RAI, 15: SciencePark, 16: Sloterdijk,
+  ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
 
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
 end
@@ -38,9 +40,11 @@ to execute-actions
   
   ; Check if itinerary is finished, if yes recreate it
   if length itinerary = 0 
-    [ set itinerary generate-schedule ]
+  [
+    set itinerary generate-schedule
+  ]
   
-  ifelse not current_stop = -1
+  ifelse current_stop = target-stop
   ; Bus is at a station
   [
     drop-off-passengers-at-station
@@ -49,7 +53,7 @@ to execute-actions
   ]
   ; Bus is still on the road
   [
-    travel-to next_stop
+    travel-to target-stop
   ]
 end
 
@@ -57,18 +61,28 @@ end
 
 to drop-off-passengers-at-station
   ;; Drop off all the passengers at station in case it's their destination.
-  ;; TODO
+  foreach bus_passengers
+  [
+    if item 1 ? = current_stop 
+    [
+      drop-off-passenger item 0 ?
+    ]
+  ]
 end
 
 to pick-up-passengers-at-station
   ;; Pick up all the passenger at a bus stop.
-  ;; TODO
+  foreach get-passengers-at-stop current_stop 
+  [
+    pick-up-passenger item 0 ?
+  ]
 end
 
 
 to pick-destination
   ;; Pick the next destination of the bus
-  ;; TODO
+  set target-stop item 0 itinerary
+  set itinerary remove-item 0 itinerary
 end
 
 
@@ -76,8 +90,8 @@ to-report generate-schedule
   ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
   ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
   report [ 
-    3 7 5 7 2 7 3 ; Amsterdam Noord
-    8 19 11 14 17 14 0 21 20 19 3 ; Amsterdam Oost / Zuid-Oost
-    9 12 22 13 22 18 1 6 16 10 15 4 3 ;; Amsterdam Zuid / West
+    3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
+    9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
+    4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
   ]
 end
