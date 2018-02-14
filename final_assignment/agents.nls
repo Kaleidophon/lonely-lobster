@@ -3,7 +3,7 @@ buses-own [
   ; Static, read-only variables. These values never change. You can read them, but you cannot change them.
   bus_id          ; The ID of a given agent (bus). Each agent has a unique ID.
   bus_type        ; The type of a given agent (bus). 1 means "small", 2 means "medium" and 3 means "large".
-    
+
   ; Dynamic, read-only variables. These values may change over time. You can read them, but you cannot change them.
   inbox           ; List containing all the incoming messages (a given message is a list like this [tick sender message]).
   bus_passengers  ; List containing all the passengers that the agent (bus) is currently carrying (represented as a list like this [passenger_id bus_stop]).
@@ -20,7 +20,7 @@ buses-own [
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
 ]
- 
+
 globals [graph]
 
 to init-buses
@@ -31,7 +31,7 @@ to init-buses
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
-  
+
   send-message bus_id dict
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
@@ -46,17 +46,17 @@ end
 to execute-actions
   ; Add decision making strategies for your agents here.
   ; You are allowed to use the global variable 'ticks'.
-  
+
   ; Check if a new bus should be used
   call-in-reinforcements
   set ticks-since-init ticks-since-init + 1
-  
+
   ; Check if itinerary is finished, if yes recreate it
-  if length itinerary = 0 
+  if length itinerary = 0
   [
     set itinerary generate-schedule
   ]
-  
+
   ifelse current_stop = target-stop
   ; Bus is at a station
   [
@@ -76,7 +76,7 @@ to drop-off-at-station
   ;; Drop off all the passengers at station in case it's their destination.
   foreach bus_passengers
   [
-    if item 1 ? = current_stop 
+    if item 1 ? = current_stop
     [
       drop-off-passenger item 0 ?
     ]
@@ -95,7 +95,7 @@ to pick-up-at-station
 end
 
 
-to pick-destination
+to pick-next-stop
   ;; Pick the next destination of the bus
   set target-stop item 0 itinerary
   set itinerary remove-item 0 itinerary
@@ -105,31 +105,31 @@ end
 to-report generate-schedule
   ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
   ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
-  let schedule [ 
+  let schedule [
     3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
     9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
     4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
   ]
-  
+
   ;; Let buses drive the route into the other direction with a 50:50 probability
   if random 2 = 0
   [
     set schedule reverse schedule
   ]
-  
+
   report schedule
 end
 
 to call-in-reinforcements
   ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
   set ratio get-waiting-passengers / count buses
-  
+
   if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
   [
     let new-bus-type determine-new-bus-type
     add-bus new-bus-type
     set called-reinforcements? true
-    
+
     ; Init a new bus
     ask buses with [ current_stop = 3 and not initialized? ] [
       set itinerary generate-schedule
@@ -144,13 +144,13 @@ to-report get-waiting-passengers
   ;; Count the total number of passengers waiting at all stations
   let waiting-passengers 0
   let bus-stop 0
-  
+
   while [ bus-stop != 23 ]
   [
     set waiting-passengers waiting-passengers + length get-passengers-at-stop bus-stop
     set bus-stop bus-stop + 1
   ]
-  
+
   report waiting-passengers
 end
 
@@ -160,12 +160,12 @@ to-report bus-full?
   [
     report length bus_passengers = 12
   ]
-  
+
   if bus_type = 2
   [
     report length bus_passengers = 60
   ]
-  
+
   if bus_type = 3
   [
     report length bus_passengers = 150
@@ -179,7 +179,7 @@ to-report determine-new-bus-type
     print "Get a big bus"
     report 3
   ]
-  
+
   ifelse ratio > 100 and ratio < 500
   [
     print ratio
