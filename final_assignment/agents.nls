@@ -15,6 +15,8 @@ buses-own [
   ; You can create any new local variable you want. Just declare them here.
   itinerary       ; List of next stations to visit
   target-stop
+  called-reinforcements?
+  initialized?
 ]
  
 globals [graph]
@@ -24,6 +26,8 @@ to init-buses
   add-bus 3
   set itinerary generate-schedule
   pick-destination
+  set called-reinforcements? false
+  set initialized? true
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
@@ -37,6 +41,9 @@ end
 to execute-actions
   ; Add decision making strategies for your agents here.
   ; You are allowed to use the global variable 'ticks'.
+  
+  ; Check if a new bus should be used
+  call-in-reinforcements
   
   ; Check if itinerary is finished, if yes recreate it
   if length itinerary = 0 
@@ -93,5 +100,23 @@ to-report generate-schedule
     3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
     9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
     4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+  ]
+end
+
+to call-in-reinforcements
+  ;; Call for a new bus in case the current fleet cannot handle all the passengers
+  ;; TODO
+  if not called-reinforcements? and length bus_passengers > 5 ; TODO Add additional criterion
+  [
+    add-bus 3
+    set called-reinforcements? true
+    
+    ; Init a new bus
+    ask buses with [ current_stop = 3 and not initialized? ] [
+      print "Asking new buses"
+      set itinerary generate-schedule
+      pick-destination
+      set called-reinforcements? false
+    ]
   ]
 end
