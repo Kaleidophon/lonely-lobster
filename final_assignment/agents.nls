@@ -13,10 +13,12 @@ buses-own [
 
   ; New local variables for students.
   ; You can create any new local variable you want. Just declare them here.
-  itinerary       ; List of next stations to visit
-  target-stop
-  called-reinforcements?
-  initialized?
+  itinerary               ; List of next stations to visit
+  target-stop .           ; Next stop the bus is driving towards
+  called-reinforcements?  ; Flag indicating whether this bus has already called a new bus
+  initialized?            ; Flag indicating whether this bus has been initialized yet
+  ratio                   ; Ratio of buses to waiting passengers
+  ticks-since-init        ; Records the ticks since the bus has been initialized
 ]
  
 globals [graph]
@@ -28,6 +30,7 @@ to init-buses
   pick-destination
   set called-reinforcements? false
   set initialized? true
+  set ticks-since-init 0
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
@@ -44,6 +47,7 @@ to execute-actions
   
   ; Check if a new bus should be used
   call-in-reinforcements
+  set ticks-since-init ticks-since-init + 1
   
   ; Check if itinerary is finished, if yes recreate it
   if length itinerary = 0 
@@ -104,19 +108,33 @@ to-report generate-schedule
 end
 
 to call-in-reinforcements
-  ;; Call for a new bus in case the current fleet cannot handle all the passengers
-  ;; TODO
-  if not called-reinforcements? and length bus_passengers > 5 ; TODO Add additional criterion
+  ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
+  set ratio get-waiting-passengers / count buses
+  
+  if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
   [
     add-bus 3
     set called-reinforcements? true
     
     ; Init a new bus
     ask buses with [ current_stop = 3 and not initialized? ] [
-      print "Asking new buses"
       set itinerary generate-schedule
       pick-destination
       set called-reinforcements? false
+      set ticks-since-init 0
     ]
   ]
+end
+
+to-report get-waiting-passengers
+  let waiting-passengers 0
+  let bus-stop 0
+  
+  while [ bus-stop != 23 ]
+  [
+    set waiting-passengers waiting-passengers + length get-passengers-at-stop bus-stop
+    set bus-stop bus-stop + 1
+  ]
+  
+  report waiting-passengers
 end
