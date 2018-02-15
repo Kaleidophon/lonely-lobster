@@ -14,7 +14,7 @@ buses-own [
   ; New local variables for students.
   ; You can create any new local variable you want. Just declare them here.
   itinerary               ; List of next stations to visit
-  target-stop .           ; Next stop the bus is driving towards
+  target-stop             ; Next stop the bus is driving towards
   called-reinforcements?  ; Flag indicating whether this bus has already called a new bus
   initialized?            ; Flag indicating whether this bus has been initialized yet
   ratio                   ; Ratio of buses to waiting passengers
@@ -83,9 +83,12 @@ end
 
 to pick-up-passengers-at-station
   ;; Pick up all the passenger at a bus stop.
-  foreach get-passengers-at-stop current_stop 
+  foreach get-passengers-at-stop current_stop
   [
-    pick-up-passenger item 0 ?
+    if not bus-full?
+    [
+      pick-up-passenger item 0 ?
+    ]
   ]
 end
 
@@ -127,6 +130,7 @@ to call-in-reinforcements
 end
 
 to-report get-waiting-passengers
+  ;; Count the total number of passengers waiting at all stations
   let waiting-passengers 0
   let bus-stop 0
   
@@ -137,4 +141,22 @@ to-report get-waiting-passengers
   ]
   
   report waiting-passengers
+end
+
+to-report bus-full?
+  ;; Check whether the buses' capacity has been reached yet.
+  if bus_type = 1
+  [
+    report length bus_passengers = 12
+  ]
+  
+  if bus_type = 2
+  [
+    report length bus_passengers = 60
+  ]
+  
+  if bus_type = 3
+  [
+    report length bus_passengers = 150
+  ]
 end
