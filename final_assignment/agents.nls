@@ -103,11 +103,19 @@ end
 to-report generate-schedule
   ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
   ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
-  report [ 
+  let schedule [ 
     3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
     9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
     4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
   ]
+  
+  ;; Let buses drive the route into the other direction with a 50:50 probability
+  if random 2 = 0
+  [
+    set schedule reverse schedule
+  ]
+  
+  report schedule
 end
 
 to call-in-reinforcements
@@ -116,7 +124,8 @@ to call-in-reinforcements
   
   if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
   [
-    add-bus 3
+    let new-bus-type determine-new-bus-type
+    add-bus new-bus-type
     set called-reinforcements? true
     
     ; Init a new bus
@@ -125,6 +134,7 @@ to call-in-reinforcements
       pick-destination
       set called-reinforcements? false
       set ticks-since-init 0
+      ;; TODO: Set bus type
     ]
   ]
 end
@@ -158,5 +168,26 @@ to-report bus-full?
   if bus_type = 3
   [
     report length bus_passengers = 150
+  ]
+end
+
+to-report determine-new-bus-type
+  if ratio >= 500
+  [
+    print ratio
+    print "Get a big bus"
+    report 3
+  ]
+  
+  ifelse ratio > 100 and ratio < 500
+  [
+    print ratio
+    print "Get a medium bus"
+    report 2
+  ]
+  [
+    print ratio
+    print "Get a small bus"
+    report 1
   ]
 end
