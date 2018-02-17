@@ -1,154 +1,203 @@
-;; GLOBALS
-breed [ garbages garbage ]
-breed [ vacuums vacuum ]
-globals [ dirt-color dirt-coords sorted-dirt-coords garbage-patch ]
-vacuums-own [ bag-capacity beliefs intention ]  ;; Coordinates of next dirty patches to clean up (or garbage can)
+; UVA/VU - Multi-Agent Systems
+; Lecturers: T. Bosse & M.C.A. Klein
+; Lab assistants: D. Formolo & L. Medeiros
 
-;; STANDARD FUNCTIONS
 
+; --- Assignment 1 - Template ---
+; Please use this template as a basis for the code to generate the behaviour of your smart vacuum cleaner.
+; However, feel free to extend this with any variable or method you think is necessary.
+
+
+; --- Settable variables ---
+; The following settable variables are given as part of the 'Interface' (hence, these variables do not need to be declared in the code):
+;
+; 1) dirt_pct: this variable represents the percentage of dirty cells in the environment.
+; For instance, if dirt_pct = 5, initially 5% of all the patches should contain dirt (and should be cleaned by your smart vacuum cleaner).
+; 2) garbage_bag_size: this variable represents the garbage bag capacity of the vacuum cleaner.
+
+; --- Global variables ---
+; The following global variables are given.
+;
+; 1) total_dirty: this variable represents the amount of dirty cells in the environment.
+; 2) time: the total simulation time.
+; 3) dirty-coords: the global list containing the initialized dirty coordinates for the vaccum at the start
+globals [total_dirty time dirty-coords move-loc can-loc]
+
+
+; --- Agents ---
+; The following types of agent (called 'breeds' in NetLogo) are given. (Note: in Assignment 1.3, you could implement the garbage can as an agent as well.)
+;
+; 1) vacuums: vacuum cleaner agents.
+; 2) garbages: garbage can agent.
+breed [vacuums vacuum]
+breed [garbages garbage]
+
+
+; --- Local variables ---
+; The following local variables are given. (Note: you might need additional local variables (e.g., to keep track of how many pieces of dirt are in the bag in Assignment 3.3). You could represent this as another belief, but it this is inconvenient you may also use another name for it.)
+;
+; 1) beliefs: the agent's belief base about locations that contain dirt
+; 2) desire: the agent's current desire
+; 3) intention: the agent's current intention
+; 3) bag-contains: the agent's current dirt filling
+vacuums-own [beliefs desire intention bag-contains]
+
+
+; --- Setup ---
 to setup
   clear-all
+  set time 0
+  setup-patches
+  setup-vacuums
+  setup-garbage-can
+  setup-ticks
+end
 
-  ;; Set globals
-  set dirt-color 38
-  set dirt-coords []
-  set sorted-dirt-coords []
 
-  ;; Init patches
-  init-patches
-  spread-dirt
+; --- Main processing cycle ---
+to go
+  ; This method executes the main processing cycle of an agent.
+  ; For Assignment 1, this involves updating desires, beliefs and intentions, and executing actions (and advancing the tick counter).
+  update-desires
+  update-beliefs
+  update-intentions
+  execute-actions
+  tick
+  set time time + 1
+  ; exits if there are no vacuum cleaner
+  if not any? turtles [ stop ]
+end
 
-  ;; Init vacuum
-  init-vacuum
 
-  ;; Init garbage
-  init-garbage
+; --- Setup patches ---
+to setup-patches
+  ; In this method you may create the environment (patches), using colors to define dirty and cleaned cells.
+  ask patches [ set pcolor green ]
+  let total-patches count patches with [pcolor = green]
+  set dirty-coords []
+  set total_dirty round  dirt_pct / 100 * total-patches
+  while [ count patches with [pcolor = brown] < total_dirty] [
+    let x-cor random-pxcor
+    let y-cor random-pycor
+    ask patch x-cor y-cor [ set pcolor brown ]
+    set dirty-coords fput patch x-cor y-cor dirty-coords
+  ]
+end
 
+
+; --- Setup vacuums ---
+to setup-vacuums
+  ; In this method you may create the vacuum cleaner agents (in this case, there is only 1 vacuum cleaner agent).
+  create-vacuums 1
+  ask vacuums [ setxy random-xcor random-ycor ]
+  ask vacuums [ set color red]
+  ask vacuums [ set bag-contains 0]
+end
+
+; --- Setup garbage can ---
+to setup-garbage-can
+  ; In this method you may create the garbage can
+  create-garbages 1
+  let x-cor random-xcor
+  let y-cor random-ycor
+  set can-loc patch x-cor y-cor
+  ask garbages [ setxy x-cor y-cor ]
+  ask garbages [ set color yellow]
+  ask garbages [ set shape "x" ]
+end
+
+
+; --- Setup ticks ---
+to setup-ticks
+  ; In this method you may start the tick counter.
   reset-ticks
 end
 
-to go
-  ;; Termination criterion
-  if all? patches [pcolor = 9] and any? vacuums-on garbage-patch
-  [
-     print "Cleaning is done!"
-     stop
-  ]
 
-  move-vacuum
-  pick-up-dirt
-  empty-bag
-  tick
-end
-
-;; MAIN FUNCTIONS
-
-to init-patches
-  ;; Initialize the patches with a default color
-  ask patches [ set pcolor 9 ]
-end
-
-to spread-dirt
-  ;; Determine which patches will be dirty
-  while [ count patches with [pcolor = dirt-color] < n-dirty ] [
-    let x-cor random-pxcor
-    let y-cor random-pycor
-
-    ;; Check whether this patch has been "spoiled" yet
-    if [ pcolor ] of patch x-cor y-cor != dirt-color [
-      ask patch x-cor y-cor [ set pcolor dirt-color ]  ;; Make the corresponding patch dirty
-      set dirt-coords fput patch x-cor y-cor dirt-coords  ;; Add it to a list in order to be used by the vacuum later
-    ]
-  ]
-end
-
-to init-garbage
-  ;; Initialize the carbage can
-  create-garbages 1 [
-    let x-cor random-xcor
-    let y-cor random-ycor
-    setxy x-cor y-cor
-    set garbage-patch patch x-cor y-cor
-    set size 2
-    set shape "x"
-    set color 95
-  ]
-end
-
-to init-vacuum
-  ;; Set the vacuum cleaner on a random position on the grid
-  create-vacuums 1 [
-    set bag-capacity max-bag-capacity
-    setxy random-xcor random-ycor
-    set color 14
-    ;;set size 1
-    set shape "arrow"
-
-    ;; Init initial belief
-    set beliefs sort-by [ [p1 p2] -> distance p1 < distance p2 ] dirt-coords
-    set intention item 0 beliefs
-    set beliefs remove-item 0 beliefs
-  ]
-end
-
-to set-intention
-  ;; Set the next intention: Garbage can if bag is full, otherwise picking up more dirt
+; --- Update desires ---
+to update-desires
+  ; You should update your agent's desires here.
+  ; At the beginning your agent should have the desire to clean all the dirt.
+  ; If it realises that there is no more dirt, its desire should change to something like 'stop and turn off'.
   ask vacuums [
-    ifelse length beliefs = 0
-    [ set intention garbage-patch ]
+    ifelse count patches with [pcolor = brown] = 0
     [
-      set beliefs sort-by [ [p1 p2] -> distance p1 < distance p2 ] beliefs
-      set intention item 0 beliefs
-      set beliefs remove-item 0 beliefs
-    ]
-  ]
-end
-
-to move-vacuum
-  ;; Desire to move the vacuum into the direction of the next dirty patch
-  ask vacuums [
-    ;; If dirty patch hasn't been reached yet
-    if not any? vacuums-on intention
-      [
-        face intention
-        fd 1
+      set desire "stop"
+      die
       ]
-  ]
-end
-
-to pick-up-dirt
-  ;; Desire to have the vacuum pick up dirt in case it stands on a dirty patch
-  ask vacuums [
-    ;; If dirty patch hasn't been reached yet
-    if any? vacuums-on intention and [ pcolor ] of intention = dirt-color [
-      ask intention [ set pcolor 9 ]  ;; Remove dirt
-      set bag-capacity bag-capacity - 1
-
-      ifelse bag-capacity = 0
-      [ set intention garbage-patch ] ;; Vacuum bag full, find garbage can
-      [ set-intention ] ;; Prepare to clean next patch
+    [
+      ifelse bag-contains = garbage_bag_size
+      [ set desire "empty garbage bag" ]
+      [ set desire "clean" ]
     ]
   ]
 end
 
-to empty-bag
-  ;; Desire to empty the vacuum's bag if it's stading on the garbage can
+
+; --- Update desires ---
+to update-beliefs
+ ; You should update your agent's beliefs here.
+ ; At the beginning your agent will receive global information about where all the dirty locations are.
+ ; This belief set needs to be updated frequently according to the cleaning actions: if you clean dirt, you do not believe anymore there is a dirt at that location.
+ ; In Assignment 1.3, your agent also needs to know where is the garbage can.
+ ask vacuums [
+   if ticks = 0 [ set beliefs dirty-coords ]
+   if desire = "clean"
+   [
+     set beliefs sort-by [ distance ?1 < distance ?2 ] beliefs
+     set move-loc item 0 beliefs
+     if [ pcolor ] of move-loc = green
+     [
+       set beliefs remove-item 0 beliefs
+       set move-loc item 0 beliefs
+     ]
+   ]
+   if desire = "empty garbage bag" [ set move-loc can-loc]
+ ]
+end
+
+
+; --- Update intentions ---
+to update-intentions
+  ; You should update your agent's intentions here.
+  ; The agent's intentions should be dependent on its beliefs and desires.
   ask vacuums [
-    if any? vacuums-on garbage-patch and intention = garbage-patch [
-      set bag-capacity max-bag-capacity
-      set-intention
+    if desire = "clean" [ set intention move-loc ]
+    if desire = "empty garbage bag" [ set intention move-loc ]
+  ]
+
+end
+
+
+; --- Execute actions ---
+to execute-actions
+  ; Here you should put the code related to the actions performed by your agent: moving and cleaning (and in Assignment 1.3, throwing away dirt).
+  ask vacuums [
+    if not any? vacuums-on intention
+    [
+      face intention
+      fd 1
+    ]
+    if any? vacuums-on intention and [ pcolor ] of intention = brown
+    [
+      ask intention [ set pcolor green ]
+      set bag-contains bag-contains + 1
+    ]
+    if any? vacuums-on intention and desire = "empty garbage bag"
+    [
+      set bag-contains 0
     ]
   ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-698
-26
-1135
-464
--1
--1
-13.0
+782
+17
+1382
+638
+12
+12
+23.6
 1
 10
 1
@@ -158,23 +207,38 @@ GRAPHICS-WINDOW
 0
 0
 1
--16
-16
--16
-16
-0
-0
+-12
+12
+-12
+12
+1
+1
 1
 ticks
 30.0
 
-BUTTON
-155
-64
-221
-97
+SLIDER
+11
+49
+777
+82
+dirt_pct
+dirt_pct
+0
+100
+3
+1
+1
 NIL
-setup
+HORIZONTAL
+
+BUTTON
+11
+17
+395
+50
+NIL
+go
 NIL
 1
 T
@@ -186,10 +250,10 @@ NIL
 1
 
 BUTTON
-184
-247
-247
-280
+394
+17
+777
+50
 NIL
 go
 T
@@ -202,50 +266,92 @@ NIL
 NIL
 1
 
-INPUTBOX
-332
-186
-481
-246
-n-dirty
-150.0
+MONITOR
+12
+115
+778
+160
+Number of dirty cells left.
+total_dirty
+17
 1
-0
-Number
+11
+
+BUTTON
+11
+82
+777
+115
+NIL
+setup
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+MONITOR
+12
+160
+778
+205
+The agent's current desire.
+[desire] of vacuum 0
+17
+1
+11
+
+MONITOR
+12
+205
+778
+250
+The agent's current belief base.
+[beliefs] of vacuum 0
+1000
+1
+11
+
+MONITOR
+12
+295
+778
+340
+Total simulation time.
+time
+17
+1
+11
+
+MONITOR
+12
+250
+778
+295
+The agent's current intention.
+[intention] of vacuum 0
+17
+1
+11
 
 SLIDER
-419
-313
-591
-346
-max-bag-capacity
-max-bag-capacity
+12
+340
+778
+373
+garbage_bag_size
+garbage_bag_size
 0
-25
-14.0
+10
+5
 1
 1
 NIL
 HORIZONTAL
-
-PLOT
-172
-330
-372
-480
-Patches & Bag Capacity
-NIL
-NIL
-0.0
-10.0
-0.0
-10.0
-true
-false
-"" ""
-PENS
-"Dirty Patches" 1.0 0 -2570826 true "" "plot count patches with [pcolor = dirt-color]"
-"Bag Capacity" 1.0 0 -13791810 true "" "plot sum [ bag-capacity ] of vacuums"
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -426,6 +532,23 @@ Circle -16777216 true false 113 68 74
 Polygon -10899396 true false 189 233 219 188 249 173 279 188 234 218
 Polygon -10899396 true false 180 255 150 210 105 210 75 240 135 240
 
+garbage-can
+false
+0
+Polygon -16777216 false false 60 240 66 257 90 285 134 299 164 299 209 284 234 259 240 240
+Rectangle -7500403 true true 60 75 240 240
+Polygon -7500403 true true 60 238 66 256 90 283 135 298 165 298 210 283 235 256 240 238
+Polygon -7500403 true true 60 75 66 57 90 30 135 15 165 15 210 30 235 57 240 75
+Polygon -7500403 true true 60 75 66 93 90 120 135 135 165 135 210 120 235 93 240 75
+Polygon -16777216 false false 59 75 66 57 89 30 134 15 164 15 209 30 234 56 239 75 235 91 209 120 164 135 134 135 89 120 64 90
+Line -16777216 false 210 120 210 285
+Line -16777216 false 90 120 90 285
+Line -16777216 false 125 131 125 296
+Line -16777216 false 65 93 65 258
+Line -16777216 false 175 131 175 296
+Line -16777216 false 235 93 235 258
+Polygon -16777216 false false 112 52 112 66 127 51 162 64 170 87 185 85 192 71 180 54 155 39 127 36
+
 house
 false
 0
@@ -563,6 +686,37 @@ Polygon -10899396 true false 132 85 134 64 107 51 108 17 150 2 192 18 192 52 169
 Polygon -10899396 true false 85 204 60 233 54 254 72 266 85 252 107 210
 Polygon -7500403 true true 119 75 179 75 209 101 224 135 220 225 175 261 128 261 81 224 74 135 88 99
 
+ufo top
+false
+0
+Circle -1 true false 15 15 270
+Circle -16777216 false false 15 15 270
+Circle -7500403 true true 75 75 150
+Circle -16777216 false false 75 75 150
+Circle -7500403 true true 60 60 30
+Circle -7500403 true true 135 30 30
+Circle -7500403 true true 210 60 30
+Circle -7500403 true true 240 135 30
+Circle -7500403 true true 210 210 30
+Circle -7500403 true true 135 240 30
+Circle -7500403 true true 60 210 30
+Circle -7500403 true true 30 135 30
+Circle -16777216 false false 30 135 30
+Circle -16777216 false false 60 210 30
+Circle -16777216 false false 135 240 30
+Circle -16777216 false false 210 210 30
+Circle -16777216 false false 240 135 30
+Circle -16777216 false false 210 60 30
+Circle -16777216 false false 135 30 30
+Circle -16777216 false false 60 60 30
+
+vacuum-cleaner
+true
+0
+Polygon -2674135 true false 75 90 105 150 165 150 135 135 105 135 90 90 75 90
+Circle -2674135 true false 105 135 30
+Rectangle -2674135 true false 75 105 90 120
+
 wheel
 false
 0
@@ -588,8 +742,9 @@ false
 0
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
+
 @#$#@#$#@
-NetLogo 6.0.2
+NetLogo 5.3.1
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
@@ -605,6 +760,7 @@ true
 0
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
+
 @#$#@#$#@
 0
 @#$#@#$#@
