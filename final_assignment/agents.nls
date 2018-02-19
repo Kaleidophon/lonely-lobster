@@ -1,3 +1,4 @@
+
 buses-own [
   ; Static, read-only variables. These values never change. You can read them, but you cannot change them.
   bus_id          ; The ID of a given agent (bus). Each agent has a unique ID.
@@ -12,19 +13,181 @@ buses-own [
 
   ; New local variables for students.
   ; You can create any new local variable you want. Just declare them here.
-
+  itinerary               ; List of next stations to visit
+  target-stop             ; Next stop the bus is driving towards
+  called-reinforcements?  ; Flag indicating whether this bus has already called a new bus
+  initialized?            ; Flag indicating whether this bus has been initialized yet
+  ratio                   ; Ratio of buses to waiting passengers
+  ticks-since-init        ; Records the ticks since the bus has been initialized
 ]
  
 globals [graph]
 
 to init-buses
   ; Initialize your agents here.
+  add-bus 3
+  set itinerary generate-schedule
+  pick-destination
+  set called-reinforcements? false
+  set initialized? true
+  set ticks-since-init 0
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
+  ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
+  ; 5: Evertsenstraat, 6: Floradorp, 7: Haarlemmermeerstation, 8: Hasseltweg, 9: Hendrikkade,
+  ; 10: Leidseplein, 11: Lelylaan, 12: Muiderpoort, 13: Museumplein, 14: RAI, 15: SciencePark, 16: Sloterdijk,
+  ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
+
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
 end
 
 to execute-actions
   ; Add decision making strategies for your agents here.
   ; You are allowed to use the global variable 'ticks'.
+  
+  ; Check if a new bus should be used
+  call-in-reinforcements
+  set ticks-since-init ticks-since-init + 1
+  
+  ; Check if itinerary is finished, if yes recreate it
+  if length itinerary = 0 
+  [
+    set itinerary generate-schedule
+  ]
+  
+  ifelse current_stop = target-stop
+  ; Bus is at a station
+  [
+    drop-off-passengers-at-station
+    pick-up-passengers-at-station
+    pick-destination
+  ]
+  ; Bus is still on the road
+  [
+    travel-to target-stop
+  ]
+end
+
+;; CUSTOM FUNCTIONS
+
+to drop-off-passengers-at-station
+  ;; Drop off all the passengers at station in case it's their destination.
+  foreach bus_passengers
+  [
+    if item 1 ? = current_stop 
+    [
+      drop-off-passenger item 0 ?
+    ]
+  ]
+end
+
+to pick-up-passengers-at-station
+  ;; Pick up all the passenger at a bus stop.
+  foreach get-passengers-at-stop current_stop
+  [
+    if not bus-full?
+    [
+      pick-up-passenger item 0 ?
+    ]
+  ]
+end
+
+
+to pick-destination
+  ;; Pick the next destination of the bus
+  set target-stop item 0 itinerary
+  set itinerary remove-item 0 itinerary
+end
+
+
+to-report generate-schedule
+  ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
+  ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
+  let schedule [ 
+    3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
+    9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
+    4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+  ]
+  
+  ;; Let buses drive the route into the other direction with a 50:50 probability
+  if random 2 = 0
+  [
+    set schedule reverse schedule
+  ]
+  
+  report schedule
+end
+
+to call-in-reinforcements
+  ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
+  set ratio get-waiting-passengers / count buses
+  
+  if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
+  [
+    let new-bus-type determine-new-bus-type
+    add-bus new-bus-type
+    set called-reinforcements? true
+    
+    ; Init a new bus
+    ask buses with [ current_stop = 3 and not initialized? ] [
+      set itinerary generate-schedule
+      pick-destination
+      set called-reinforcements? false
+      set ticks-since-init 0
+      ;; TODO: Set bus type
+    ]
+  ]
+end
+
+to-report get-waiting-passengers
+  ;; Count the total number of passengers waiting at all stations
+  let waiting-passengers 0
+  let bus-stop 0
+  
+  while [ bus-stop != 23 ]
+  [
+    set waiting-passengers waiting-passengers + length get-passengers-at-stop bus-stop
+    set bus-stop bus-stop + 1
+  ]
+  
+  report waiting-passengers
+end
+
+to-report bus-full?
+  ;; Check whether the buses' capacity has been reached yet.
+  if bus_type = 1
+  [
+    report length bus_passengers = 12
+  ]
+  
+  if bus_type = 2
+  [
+    report length bus_passengers = 60
+  ]
+  
+  if bus_type = 3
+  [
+    report length bus_passengers = 150
+  ]
+end
+
+to-report determine-new-bus-type
+  if ratio >= 500
+  [
+    print ratio
+    print "Get a big bus"
+    report 3
+  ]
+  
+  ifelse ratio > 100 and ratio < 500
+  [
+    print ratio
+    print "Get a medium bus"
+    report 2
+  ]
+  [
+    print ratio
+    print "Get a small bus"
+    report 1
+  ]
 end
