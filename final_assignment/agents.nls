@@ -21,6 +21,7 @@ buses-own [
   ticks-since-init        ; Records the ticks since the bus has been initialized
 ]
  
+extensions [table]
 globals [graph]
 
 to init-buses
@@ -31,8 +32,6 @@ to init-buses
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
-  
-  send-message bus_id dict
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
@@ -41,6 +40,8 @@ to init-buses
   ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
 
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
+  ;get-all-distances
+  let distances read-distances 
 end
 
 to execute-actions
@@ -136,6 +137,7 @@ to call-in-reinforcements
       pick-destination
       set called-reinforcements? false
       set ticks-since-init 0
+      let distances read-distances 
     ]
   ]
 end
@@ -190,5 +192,56 @@ to-report determine-new-bus-type
     print ratio
     print "Get a small bus"
     report 1
+  ]
+end
+
+;; File I/O
+
+to-report read-distances
+  ;; Read distances between bus stops from a file
+  let distances table:make
+  file-open "distances.txt"
+
+  while [ not file-at-end? ]
+  [
+    let from-stop file-read
+    let to-stop file-read
+    let dist file-read
+    let key (list from-stop to-stop)
+    table:put distances key dist
+  ]
+  
+  file-close
+  report distances
+end
+
+to get-all-distances
+  ;; Retrieve the distances between all the bus stops and write them into a file
+  let bus-stop-i 0
+  let bus-stop-j 0
+  
+  while [bus-stop-i <= 23]
+  [
+    while [bus-stop-j <= 23]
+    [
+      if bus-stop-j > bus-stop-i  ; Don't consider the reverse direction if you alreay calculated it
+      [
+        let dist get-distance bus-stop-i bus-stop-j
+        
+        if dist != -1
+        [
+          file-open "distances.txt"
+          ; Both directions, graph is not directional
+          file-write bus-stop-i file-write bus-stop-j file-write dist file-print ""
+          file-write bus-stop-j file-write bus-stop-i file-write dist file-print ""
+          file-flush
+          file-close
+        ]
+      ]
+      
+      set bus-stop-j bus-stop-j + 1
+    ]
+    set bus-stop-i bus-stop-i + 1
+    set bus-stop-j 0
   ]
 end
