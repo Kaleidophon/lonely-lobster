@@ -19,6 +19,8 @@ buses-own [
   initialized?            ; Flag indicating whether this bus has been initialized yet
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
+  capacity                ; Total capacity of bus
+  contracts               ; List of open / pending requests to other buses
 ]
  
 extensions [table]
@@ -32,6 +34,7 @@ to init-buses
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
+  set contracts []
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
@@ -71,7 +74,9 @@ to execute-actions
   ]
 end
 
-;; CUSTOM FUNCTIONS
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                             PASSENGER MANAGEMENT
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 to drop-off-at-station
   ;; Drop off all the passengers at station in case it's their destination.
@@ -95,6 +100,21 @@ to pick-up-at-station
   ]
 end
 
+to-report get-passenger-destinations
+  ;; Return the destinations of all passengers as a list
+  let destinations []
+  
+  foreach bus_passengers
+  [
+    set destinations fput item 1 ? destinations
+  ]
+  
+  report destinations
+end
+
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                                   BUS LOGIC
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 to pick-destination
   ;; Pick the next destination of the bus
@@ -138,6 +158,7 @@ to call-in-reinforcements
       set called-reinforcements? false
       set ticks-since-init 0
       let distances read-distances 
+      set contracts []
     ]
   ]
 end
@@ -158,19 +179,24 @@ end
 
 to-report bus-full?
   ;; Check whether the buses' capacity has been reached yet.
+  report length bus_passengers = get-capacity
+end
+
+to-report get-capacity
+  ;; Return the passenger capacity of the current bus
   if bus_type = 1
   [
-    report length bus_passengers = 12
+    report 12
   ]
   
   if bus_type = 2
   [
-    report length bus_passengers = 60
+    report 60
   ]
   
   if bus_type = 3
   [
-    report length bus_passengers = 150
+    report 150
   ]
 end
 
@@ -195,7 +221,80 @@ to-report determine-new-bus-type
   ]
 end
 
-;; File I/O
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                                   MESSAGING
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+to-report send-message-with-contract [ receiver action content callback ]
+  let contract-id generate-contract-id
+  let message create-message contract-id receiver action content
+  add-contract contract-id callback
+  
+end
+
+to add-contract [ contract-id callback ]
+  ;; Add a new contract
+  set contracts fput (list contract-id callback ) contracts
+end
+
+to-report fulfill-contract [ contract-id response ]
+  ;; Fulfill an existing contract and execute the callback function
+  let contract-index 0  ; iterator, not contract id!
+  
+  while [ contract-index < length contracts ]
+  [
+    ; TODO: Replace w/ better function? list.item(...) ?
+    let current-contract item contract-index contracts
+    let current-contract-id item 0 current-contract
+     
+    if current-contract-id = contract-id
+    [
+      let callback item 1 current-contract
+      set contracts remove-item contract-index contracts ; Remove contract; it has been fulfilled
+      report (runresult callback response) ; Feed the response of another bus into the contract callback
+    ]
+    set contract-index contract-index + 1
+  ]
+  report -1
+end
+
+
+to-report create-message [ contract-id receiver action content ]
+  ;; Compose a full message out of its path
+  let message table:make
+  
+  table:put message "contract-id" contract-id
+  table:put message "receiver" receiver
+  table:put message "action" action
+  table:put message "content" content
+  
+  report message
+end
+
+to-report compile-info
+  ;; Compile information about the current bus in order to exchange it with other buses
+  let info table:make
+  
+  table:put info "bus-id" bus_id
+  table:put info "target" target-stop
+  table:put info "num-passengers" length bus_passengers
+  table:put info "total-capacity" get-capacity
+  table:put info "capacity-left" get-capacity - length bus_passengers
+  table:put info "itinerary" itinerary
+  table:put info "destinations" get-passenger-destinations
+  
+  report info
+end
+
+to-report generate-contract-id
+  ;; Generate a (hopefully) unique id for a contract
+  let contract-id (word bus_id "-" word ticks-since-init "-" random 100)
+  report contract-id
+end
+
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                                   DISTANCES
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 to-report read-distances
   ;; Read distances between bus stops from a file
