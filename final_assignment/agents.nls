@@ -31,6 +31,8 @@ to init-buses
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
+  
+  send-message bus_id dict
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
@@ -58,8 +60,8 @@ to execute-actions
   ifelse current_stop = target-stop
   ; Bus is at a station
   [
-    drop-off-passengers-at-station
-    pick-up-passengers-at-station
+    drop-off-at-station
+    pick-up-at-station
     pick-destination
   ]
   ; Bus is still on the road
@@ -70,7 +72,7 @@ end
 
 ;; CUSTOM FUNCTIONS
 
-to drop-off-passengers-at-station
+to drop-off-at-station
   ;; Drop off all the passengers at station in case it's their destination.
   foreach bus_passengers
   [
@@ -81,7 +83,7 @@ to drop-off-passengers-at-station
   ]
 end
 
-to pick-up-passengers-at-station
+to pick-up-at-station
   ;; Pick up all the passenger at a bus stop.
   foreach get-passengers-at-stop current_stop
   [
@@ -134,7 +136,6 @@ to call-in-reinforcements
       pick-destination
       set called-reinforcements? false
       set ticks-since-init 0
-      ;; TODO: Set bus type
     ]
   ]
 end
