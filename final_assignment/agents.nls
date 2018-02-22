@@ -21,6 +21,7 @@ buses-own [
   ticks-since-init        ; Records the ticks since the bus has been initialized
   capacity                ; Total capacity of bus
   contracts               ; List of open / pending requests to other buses
+  known-buses             ; List of other buses in this simulation
 ]
  
 extensions [table]
@@ -54,6 +55,10 @@ to execute-actions
   ; Check if a new bus should be used
   call-in-reinforcements
   set ticks-since-init ticks-since-init + 1
+  
+  ; Message management
+  answer-questions
+  ask-questions
   
   ; Check if itinerary is finished, if yes recreate it
   if length itinerary = 0 
@@ -153,12 +158,7 @@ to call-in-reinforcements
     
     ; Init a new bus
     ask buses with [ current_stop = 3 and not initialized? ] [
-      set itinerary generate-schedule
-      pick-destination
-      set called-reinforcements? false
-      set ticks-since-init 0
-      let distances read-distances 
-      set contracts []
+      init-buses
     ]
   ]
 end
@@ -203,20 +203,14 @@ end
 to-report determine-new-bus-type
   if ratio >= 500
   [
-    print ratio
-    print "Get a big bus"
     report 3
   ]
   
   ifelse ratio > 100 and ratio < 500
   [
-    print ratio
-    print "Get a medium bus"
     report 2
   ]
   [
-    print ratio
-    print "Get a small bus"
     report 1
   ]
 end
@@ -225,16 +219,97 @@ end
 ;;                                   MESSAGING
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
-to-report send-message-with-contract [ receiver action content callback ]
+to ask-questions
+  ;; Ask other buses for some sort of information
+  ;; Put all the requests done during every tick here
+  
+  message-test-request
+end
+
+to answer-questions
+  ;; Answer requests by other buses
+  ;; Put all the logic a bus uses to react to a certain request here
+  let mail-index 0
+  
+  while [ mail-index < length inbox ]
+  [
+    ;let raw-mail item mail-index inbox
+    let current-mail item mail-index inbox
+    set current-mail item 2 current-mail ; If you send a message, it gets wrapped in another list
+    
+    ;; Try to fulfill the contract mentioned in this message
+    let contract-id table:get current-mail "contract-id"
+    let res fulfill-contract contract-id current-mail
+    
+    ;; Perform other reactions to a message
+    message-test-answer mail-index current-mail
+    
+    set mail-index mail-index + 1
+  ]
+  
+end
+
+to message-test-request
+  ;; Have a bus introduce itself after its creation
+  ;; TODO: This is just to test the messaging logic. Remove later.
+  
+  if ticks-since-init = 1 ; Introduce bus to other buses only once
+  [
+     let action "ASK"
+     let content (word "I am bus " bus_id ". Please return my handshake?")
+     
+     let bus_index 24
+     
+     ; Send message to all other buses
+     while [ bus_index < bus_id ]
+     [
+       send-message-with-contract bus_index action content (task message-test-callback)
+       set bus_index bus_index + 1
+     ]
+  ]
+end
+
+to message-test-answer [ mail-index request ]
+  let sender-action table:get request "action"
+  
+  if sender-action = "ASK"
+  [
+    let sender-id table:get request "sender"
+    let contract-id table:get request "contract-id"
+    let response (word "Hello bus " sender-id)
+    let action "RESPOND"
+  
+    let message create-message contract-id sender-id action response
+    send-message sender-id message
+    set inbox remove-item mail-index inbox
+  ]
+end
+
+to-report message-test-callback [ response ]
+  ;; Verify that the handshake has been successful.
+  ;; TODO: This is just to test the messaging logic. Remove later.
+  
+  let sender table:get response "sender"
+  let content table:get response "content"
+  
+  print (word "Bus " bus_id ". Bus " sender " says: " content)
+  
+  report true
+end
+
+to send-message-with-contract [ receiver action content callback ]
+  ;; Send a message to another bus and create a contract. 
+  ;; The contract is deemd fulfilled once the bus receives a response from the addressed bus.
   let contract-id generate-contract-id
   let message create-message contract-id receiver action content
   add-contract contract-id callback
-  
+  send-message receiver message
 end
 
 to add-contract [ contract-id callback ]
   ;; Add a new contract
   set contracts fput (list contract-id callback ) contracts
+  show (word "Generated new contract " contract-id)
 end
 
 to-report fulfill-contract [ contract-id response ]
@@ -243,7 +318,7 @@ to-report fulfill-contract [ contract-id response ]
   
   while [ contract-index < length contracts ]
   [
-    ; TODO: Replace w/ better function? list.item(...) ?
+    ; TODO: Replace w/ better function? Sth like list.item(...) ?
     let current-contract item contract-index contracts
     let current-contract-id item 0 current-contract
      
@@ -251,11 +326,12 @@ to-report fulfill-contract [ contract-id response ]
     [
       let callback item 1 current-contract
       set contracts remove-item contract-index contracts ; Remove contract; it has been fulfilled
+      show (word "Fulfilling contract " contract-id)
       report (runresult callback response) ; Feed the response of another bus into the contract callback
     ]
     set contract-index contract-index + 1
   ]
-  report -1
+  report false
 end
 
 
@@ -265,6 +341,7 @@ to-report create-message [ contract-id receiver action content ]
   
   table:put message "contract-id" contract-id
   table:put message "receiver" receiver
+  table:put message "sender" bus_id
   table:put message "action" action
   table:put message "content" content
   
