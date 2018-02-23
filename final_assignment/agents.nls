@@ -20,8 +20,9 @@ buses-own [
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
   capacity                ; Total capacity of bus
-  contracts               ; List of open / pending requests to other buses
-  known-buses             ; List of other buses in this simulation
+  pending-contracts       ; table of open / pending requests to other buses
+  assigned-contracts      ; table of requests received by other buses
+  reactions               ; List of tasks of function that are used to react to an incoming request by another bus             
 ]
  
 extensions [table]
@@ -29,13 +30,14 @@ globals [graph]
 
 to init-buses
   ; Initialize your agents here.
-  add-bus 3
   set itinerary generate-schedule
   pick-destination
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
-  set contracts []
+  set pending-contracts table:make
+  set assigned-contracts table:make
+  set reactions (list (task message-test-answer)) ; Add new reaction to requests as tasks here
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
@@ -57,6 +59,7 @@ to execute-actions
   set ticks-since-init ticks-since-init + 1
   
   ; Message management
+  process-inbox
   answer-questions
   ask-questions
   
@@ -155,7 +158,7 @@ to call-in-reinforcements
     let new-bus-type determine-new-bus-type
     add-bus new-bus-type
     set called-reinforcements? true
-    
+ 
     ; Init a new bus
     ask buses with [ current_stop = 3 and not initialized? ] [
       init-buses
@@ -219,32 +222,67 @@ end
 ;;                                   MESSAGING
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
+;; The messaging with contracts logic works the following way
+;; First of all, a bus goes through its mailbox, looking for reponses to contracts it assigned to other buses 
+;; or contracts is has been assigned to by other buses (process-inbox).
+;; If there are any, it tries to process them accordingly (answer-questions), which can happen in to cases:
+;;   a) It is a notification that the contract is has assigned to another bus has been fulfilled. The corresponding
+;;      pending contract we be marked as fulfilled.
+;;   b) It is a contract assigned by another bus: Add it to the list of assigned-contracts and try to process it immediately.
+;;      These ways to process a possible request should be functions added to the <reaction> variable of each bus.
+;;
+;; Afterwards, the bus gets "curious" itself and asks other buses questions (ask-questions).
+;; The conditions for these questions should be defined in the question function itself to keep the code more readable.
+;; In case the bus asks a question, a pending contract is created and added to pending-contracts. The message is sent
+;; to the bus in question, containing the act ("ASK", "DO", ...), the id of the ID and the receiver and the sender
+;; and the ID of the bus the contract originated from and the bus it was assigned to (because that will be the other 
+;; way around once a contract is send back to its original contractor). Once the target bus has received the message with the
+;; contract, it performs the steps described above.
+
+to process-inbox
+  ;; Process inbox, generate new assigned contracts for every contract received by another bus
+  while [ length inbox > 0 ]
+  [
+    let current-mail item 0 inbox
+    set inbox remove-item 0 inbox
+    set current-mail item 2 current-mail ; If you send a message, it gets wrapped in another list
+    let contract-id table:get current-mail "contract-id"
+    let contract-to table:get current-mail "contract-to"
+    
+    let res fulfill-pending-contract contract-id current-mail
+    
+    ; If the current contract hasn't been a response by another bus, it is a contract assignt TO this bus
+    ; So add it as a assigned contract
+    if not res and contract-to = bus_id
+    [
+      add-assigned-contract contract-id current-mail
+    ]
+  ]
+end
+
 to ask-questions
   ;; Ask other buses for some sort of information
   ;; Put all the requests done during every tick here
-  
   message-test-request
 end
 
 to answer-questions
   ;; Answer requests by other buses
   ;; Put all the logic a bus uses to react to a certain request here
-  let mail-index 0
-  
-  while [ mail-index < length inbox ]
-  [
-    ;let raw-mail item mail-index inbox
-    let current-mail item mail-index inbox
-    set current-mail item 2 current-mail ; If you send a message, it gets wrapped in another list
+  foreach table:keys assigned-contracts
+  [    
+    ;; Perform reactions to a message
+    let reacted? false
+    let reaction-index 0
     
-    ;; Try to fulfill the contract mentioned in this message
-    let contract-id table:get current-mail "contract-id"
-    let res fulfill-contract contract-id current-mail
-    
-    ;; Perform other reactions to a message
-    message-test-answer mail-index current-mail
-    
-    set mail-index mail-index + 1
+    while [ not reacted? and reaction-index < length reactions ]
+    [
+      let current-reaction item reaction-index reactions
+      let current-contract table:get assigned-contracts ?
+      set reacted? (runresult current-reaction current-contract)
+      
+      set reaction-index reaction-index + 1
+    ]
   ]
   
 end
@@ -269,20 +307,24 @@ to message-test-request
   ]
 end
 
-to message-test-answer [ mail-index request ]
+to-report message-test-answer [ request ]
   let sender-action table:get request "action"
   
   if sender-action = "ASK"
   [
     let sender-id table:get request "sender"
     let contract-id table:get request "contract-id"
-    let response (word "Hello bus " sender-id)
+    let response (word "Hello bus " sender-id "!")
     let action "RESPOND"
   
     let message create-message contract-id sender-id action response
+    table:put message "contract-from" table:get request "contract-from"
+    table:put message "contract-to" table:get request "contract-to"
     send-message sender-id message
-    set inbox remove-item mail-index inbox
+    report fulfill-assigned-contract contract-id
   ]
+  
+  report false
 end
 
 to-report message-test-callback [ response ]
@@ -292,8 +334,7 @@ to-report message-test-callback [ response ]
   let sender table:get response "sender"
   let content table:get response "content"
   
-  print (word "Bus " bus_id ". Bus " sender " says: " content)
-  
+  show (word "Bus " sender " says: " content)
   report true
 end
 
@@ -302,38 +343,49 @@ to send-message-with-contract [ receiver action content callback ]
   ;; The contract is deemd fulfilled once the bus receives a response from the addressed bus.
   let contract-id generate-contract-id
   let message create-message contract-id receiver action content
-  add-contract contract-id callback
+  table:put message "contract-from" bus_id
+  table:put message "contract-to" receiver
+  
+  add-pending-contract contract-id callback
   send-message receiver message
 end
 
-to add-contract [ contract-id callback ]
-  ;; Add a new contract
-  set contracts fput (list contract-id callback ) contracts
-  show (word "Generated new contract " contract-id)
+to add-pending-contract [ contract-id callback ]
+  ;; Add a new contract to the table of pending contracts
+  table:put pending-contracts contract-id callback
+  show (word "Generated new pending contract " contract-id)
 end
 
-to-report fulfill-contract [ contract-id response ]
+to-report fulfill-pending-contract [ contract-id response ]
   ;; Fulfill an existing contract and execute the callback function
-  let contract-index 0  ; iterator, not contract id!
-  
-  while [ contract-index < length contracts ]
-  [
-    ; TODO: Replace w/ better function? Sth like list.item(...) ?
-    let current-contract item contract-index contracts
-    let current-contract-id item 0 current-contract
-     
-    if current-contract-id = contract-id
-    [
-      let callback item 1 current-contract
-      set contracts remove-item contract-index contracts ; Remove contract; it has been fulfilled
-      show (word "Fulfilling contract " contract-id)
-      report (runresult callback response) ; Feed the response of another bus into the contract callback
-    ]
-    set contract-index contract-index + 1
+  carefully [
+    let callback table:get pending-contracts contract-id
+    table:remove pending-contracts contract-id ; Remove contract; it has been fulfilled
+    show (word "Fulfilling pending contract " contract-id)
+    report (runresult callback response) ; Feed the response of another bus into the contract callback
   ]
-  report false
+  [
+    report false
+  ]
 end
 
+to add-assigned-contract [ contract-id request ]
+  ;; Add a new contract to the table of contracts assigned to this bus
+  table:put assigned-contracts contract-id request
+  show (word "Received assigned contract " contract-id)
+end
+
+to-report fulfill-assigned-contract [ contract-id ]
+  ;; Fulfill a contract that has been assigned to this bus by another bus
+  carefully [
+    table:remove assigned-contracts contract-id ; Remove contract; it has been fulfilled
+    show (word "Fulfilling assigned contract " contract-id)
+    report true
+  ]
+  [
+    report false
+  ]
+end
 
 to-report create-message [ contract-id receiver action content ]
   ;; Compose a full message out of its path
@@ -365,7 +417,7 @@ end
 
 to-report generate-contract-id
   ;; Generate a (hopefully) unique id for a contract
-  let contract-id (word bus_id "-" word ticks-since-init "-" random 100)
+  let contract-id (word bus_id ":" word ticks-since-init ":" random 100)
   report contract-id
 end
 
