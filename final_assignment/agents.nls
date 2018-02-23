@@ -317,9 +317,7 @@ to-report message-test-answer [ request ]
     let response (word "Hello bus " sender-id "!")
     let action "RESPOND"
   
-    let message create-message contract-id sender-id action response
-    table:put message "contract-from" table:get request "contract-from"
-    table:put message "contract-to" table:get request "contract-to"
+    let message create-message contract-id table:get request "contract-from" table:get request "contract-to" sender-id action response
     send-message sender-id message
     report fulfill-assigned-contract contract-id
   ]
@@ -342,9 +340,7 @@ to send-message-with-contract [ receiver action content callback ]
   ;; Send a message to another bus and create a contract. 
   ;; The contract is deemd fulfilled once the bus receives a response from the addressed bus.
   let contract-id generate-contract-id
-  let message create-message contract-id receiver action content
-  table:put message "contract-from" bus_id
-  table:put message "contract-to" receiver
+  let message create-message contract-id bus_id receiver receiver action content
   
   add-pending-contract contract-id callback
   send-message receiver message
@@ -387,11 +383,13 @@ to-report fulfill-assigned-contract [ contract-id ]
   ]
 end
 
-to-report create-message [ contract-id receiver action content ]
+to-report create-message [ contract-id contract-from contract-to receiver action content ]
   ;; Compose a full message out of its path
   let message table:make
   
   table:put message "contract-id" contract-id
+  table:put message "contract-from" contract-from
+  table:put message "contract-to" contract-to
   table:put message "receiver" receiver
   table:put message "sender" bus_id
   table:put message "action" action
