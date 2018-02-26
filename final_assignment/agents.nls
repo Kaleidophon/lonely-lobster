@@ -3,7 +3,7 @@ buses-own [
   ; Static, read-only variables. These values never change. You can read them, but you cannot change them.
   bus_id          ; The ID of a given agent (bus). Each agent has a unique ID.
   bus_type        ; The type of a given agent (bus). 1 means "small", 2 means "medium" and 3 means "large".
-    
+
   ; Dynamic, read-only variables. These values may change over time. You can read them, but you cannot change them.
   inbox           ; List containing all the incoming messages (a given message is a list like this [tick sender message]).
   bus_passengers  ; List containing all the passengers that the agent (bus) is currently carrying (represented as a list like this [passenger_id bus_stop]).
@@ -19,6 +19,7 @@ buses-own [
   initialized?            ; Flag indicating whether this bus has been initialized yet
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
+  path-destination        ; Records the shortest path to the destination
   capacity                ; Total capacity of bus
   pending-contracts       ; table of open / pending requests to other buses
   assigned-contracts      ; table of requests received by other buses
@@ -53,33 +54,35 @@ end
 to execute-actions
   ; Add decision making strategies for your agents here.
   ; You are allowed to use the global variable 'ticks'.
-  
+
   ; Check if a new bus should be used
   call-in-reinforcements
   set ticks-since-init ticks-since-init + 1
-  
+
   ; Message management
   process-inbox
   answer-questions
   ask-questions
-  
+
   ; Check if itinerary is finished, if yes recreate it
-  if length itinerary = 0 
+  if length itinerary = 0
   [
     set itinerary generate-schedule
   ]
-  
+
   ifelse current_stop = target-stop
   ; Bus is at a station
   [
     drop-off-at-station
     pick-up-at-station
     pick-destination
+    set path-destination get-path-destination
   ]
   ; Bus is still on the road
   [
     travel-to target-stop
   ]
+
 end
 
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -90,7 +93,7 @@ to drop-off-at-station
   ;; Drop off all the passengers at station in case it's their destination.
   foreach bus_passengers
   [
-    if item 1 ? = current_stop 
+    if item 1 ? = current_stop
     [
       drop-off-passenger item 0 ?
     ]
@@ -130,35 +133,34 @@ to pick-destination
   set itinerary remove-item 0 itinerary
 end
 
-
 to-report generate-schedule
   ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
   ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
-  let schedule [ 
+  let schedule [
     3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
     9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
     4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
   ]
-  
+
   ;; Let buses drive the route into the other direction with a 50:50 probability
   if random 2 = 0
   [
     set schedule reverse schedule
   ]
-  
+
   report schedule
 end
 
 to call-in-reinforcements
   ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
   set ratio get-waiting-passengers / count buses
-  
+
   if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
   [
     let new-bus-type determine-new-bus-type
     add-bus new-bus-type
     set called-reinforcements? true
- 
+
     ; Init a new bus
     ask buses with [ current_stop = 3 and not initialized? ] [
       init-buses
@@ -170,13 +172,13 @@ to-report get-waiting-passengers
   ;; Count the total number of passengers waiting at all stations
   let waiting-passengers 0
   let bus-stop 0
-  
+
   while [ bus-stop != 23 ]
   [
     set waiting-passengers waiting-passengers + length get-passengers-at-stop bus-stop
     set bus-stop bus-stop + 1
   ]
-  
+
   report waiting-passengers
 end
 
@@ -191,12 +193,12 @@ to-report get-capacity
   [
     report 12
   ]
-  
+
   if bus_type = 2
   [
     report 60
   ]
-  
+
   if bus_type = 3
   [
     report 150
@@ -208,7 +210,7 @@ to-report determine-new-bus-type
   [
     report 3
   ]
-  
+
   ifelse ratio > 100 and ratio < 500
   [
     report 2
@@ -423,51 +425,69 @@ end
 ;;                                   DISTANCES
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
-to-report read-distances
-  ;; Read distances between bus stops from a file
-  let distances table:make
-  file-open "distances.txt"
-
-  while [ not file-at-end? ]
-  [
-    let from-stop file-read
-    let to-stop file-read
-    let dist file-read
-    let key (list from-stop to-stop)
-    table:put distances key dist
-  ]
-  
-  file-close
-  report distances
-end
-
-to get-all-distances
-  ;; Retrieve the distances between all the bus stops and write them into a file
+to-report get-path-destination
   let bus-stop-i 0
-  let bus-stop-j 0
-  
+  let distance-to-source table:make ; To store the distance of the shortest path to the source node
+  let backtrack table:make ; To keep track of the previous node in the path
+
+  ; Initialize distance-to-source with 0 for source node and for others initialize with infinity
   while [bus-stop-i <= 23]
   [
-    while [bus-stop-j <= 23]
+    if bus-stop-i != current_stop
     [
-      if bus-stop-j > bus-stop-i  ; Don't consider the reverse direction if you alreay calculated it
-      [
-        let dist get-distance bus-stop-i bus-stop-j
-        
-        if dist != -1
-        [
-          file-open "distances.txt"
-          ; Both directions, graph is not directional
-          file-write bus-stop-i file-write bus-stop-j file-write dist file-print ""
-          file-write bus-stop-j file-write bus-stop-i file-write dist file-print ""
-          file-flush
-          file-close
-        ]
-      ]
-      
-      set bus-stop-j bus-stop-j + 1
+      table:put distance-to-source bus-stop-i 999999
     ]
     set bus-stop-i bus-stop-i + 1
-    set bus-stop-j 0
   ]
+  table:put distance-to-source current_stop 0
+
+  ; Heap to keep track of the nodes to find shortest path to the source
+  let heap table:keys distance-to-source
+
+  while [ not empty? heap]
+  [
+    let min-distance 9999999
+    let min-index 0
+    foreach heap
+    [
+      if table:get distance-to-source ? < min-distance
+      [
+        set min-distance table:get distance-to-source ?
+        set min-index ?
+      ]
+    ]
+    set heap remove min-index heap
+
+    ; show (word "Heap " heap)
+
+    foreach item min-index graph
+    [
+      let path-length table:get distance-to-source min-index + get-distance min-index ?
+      if table:get distance-to-source ? > path-length
+      [
+        table:put distance-to-source ? path-length
+        table:put backtrack ? min-index
+      ]
+    ]
+    ; show (word "Distances from source " table:to-list distance-to-source)
+  ]
+
+  ; Backtrack to the source using the bracktrack table
+  let backtrack-stop target-stop
+  ; Variable to store the shortest path
+  let shortest-path []
+
+  ; Start by adding the target stop
+  set shortest-path fput target-stop shortest-path
+
+  while [backtrack-stop != current_stop]
+  [
+    set backtrack-stop table:get backtrack backtrack-stop
+    ; Keep adding the previous node to the shortest path while backtracking to the source
+    set shortest-path fput backtrack-stop shortest-path
+  ]
+
+  show (word "Shortest path" shortest-path)
+
+  report shortest-path
 end
