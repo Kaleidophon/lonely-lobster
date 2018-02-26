@@ -1,0 +1,70 @@
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                                   DISTANCES
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+to-report get-path-destination
+  let bus-stop-i 0
+  let distance-to-source table:make ; To store the distance of the shortest path to the source node
+  let backtrack table:make ; To keep track of the previous node in the path
+
+  ; Initialize distance-to-source with 0 for source node and for others initialize with infinity
+  while [bus-stop-i <= 23]
+  [
+    if bus-stop-i != current_stop
+    [
+      table:put distance-to-source bus-stop-i 999999
+    ]
+    set bus-stop-i bus-stop-i + 1
+  ]
+  table:put distance-to-source current_stop 0
+
+  ; Heap to keep track of the nodes to find shortest path to the source
+  let heap table:keys distance-to-source
+
+  while [ not empty? heap]
+  [
+    let min-distance 9999999
+    let min-index 0
+    foreach heap
+    [
+      if table:get distance-to-source ? < min-distance
+      [
+        set min-distance table:get distance-to-source ?
+        set min-index ?
+      ]
+    ]
+    set heap remove min-index heap
+
+    ; show (word "Heap " heap)
+
+    foreach item min-index graph
+    [
+      let path-length table:get distance-to-source min-index + get-distance min-index ?
+      if table:get distance-to-source ? > path-length
+      [
+        table:put distance-to-source ? path-length
+        table:put backtrack ? min-index
+      ]
+    ]
+    ; show (word "Distances from source " table:to-list distance-to-source)
+  ]
+
+  ; Backtrack to the source using the bracktrack table
+  let backtrack-stop target-stop
+  ; Variable to store the shortest path
+  let shortest-path []
+
+  ; Start by adding the target stop
+  set shortest-path fput target-stop shortest-path
+
+  while [backtrack-stop != current_stop]
+  [
+    set backtrack-stop table:get backtrack backtrack-stop
+    ; Keep adding the previous node to the shortest path while backtracking to the source
+    set shortest-path fput backtrack-stop shortest-path
+  ]
+
+  show (word "Shortest path" shortest-path)
+
+  report shortest-path
+end
