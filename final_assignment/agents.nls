@@ -13,12 +13,14 @@ buses-own [
 
   ; New local variables for students.
   ; You can create any new local variable you want. Just declare them here.
-  itinerary               ; List of next stations to visit
+  itinerary               ; List of next stations to visit (changes during day)
+  schedule                ; Complete list of stations in area (does not change) 
   target-stop             ; Next stop the bus is driving towards
   called-reinforcements?  ; Flag indicating whether this bus has already called a new bus
   initialized?            ; Flag indicating whether this bus has been initialized yet
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
+  unread-messages
 ]
  
 globals [graph]
@@ -26,13 +28,14 @@ globals [graph]
 to init-buses
   ; Initialize your agents here.
   add-bus 3
-  set itinerary generate-schedule
+  set schedule generate-schedule "TEST"
+  set itinerary schedule
   pick-destination
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
   
-  send-message bus_id dict
+;  send-message bus_id dict
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
@@ -54,7 +57,7 @@ to execute-actions
   ; Check if itinerary is finished, if yes recreate it
   if length itinerary = 0 
   [
-    set itinerary generate-schedule
+    set itinerary generate-schedule "TEST"
   ]
   
   ifelse current_stop = target-stop
@@ -68,6 +71,11 @@ to execute-actions
   [
     travel-to target-stop
   ]
+  
+;  if not (length inbox = 0)
+;  [
+;    show inbox
+;  ]
 end
 
 ;; CUSTOM FUNCTIONS
@@ -87,9 +95,15 @@ to pick-up-at-station
   ;; Pick up all the passenger at a bus stop.
   foreach get-passengers-at-stop current_stop
   [
-    if not bus-full?
+    ifelse not bus-full?
     [
-      pick-up-passenger item 0 ?
+      if in-area? item 1 ?
+      [
+        pick-up-passenger item 0 ?
+      ]
+    ]
+    [
+      send-public-message itinerary
     ]
   ]
 end
@@ -102,13 +116,28 @@ to pick-destination
 end
 
 
-to-report generate-schedule
+to-report generate-schedule [area]
   ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
   ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
-  let schedule [ 
+   if area = "noord"
+   [
+    set schedule [3 9 8 6 8 2 8 9 3] ; Amsterdam Noord
+   ]
+   if area = "oost"
+   [
+    set schedule [9 20 12 15 18 15 0 22 21 20 3] ; Amsterdam Oost
+   ]
+   if area = "west"
+   [
+    set schedule [4 10 13 23 14 23 19 1 7 17 11 16 5 4 3] ;; Amsterdam Zuid / West
+   ]
+   if area = "all"
+   [
+   set schedule [ 
     3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
     9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
     4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+   ]
   ]
   
   ;; Let buses drive the route into the other direction with a 50:50 probability
@@ -132,7 +161,7 @@ to call-in-reinforcements
     
     ; Init a new bus
     ask buses with [ current_stop = 3 and not initialized? ] [
-      set itinerary generate-schedule
+      set itinerary generate-schedule "TEST"
       pick-destination
       set called-reinforcements? false
       set ticks-since-init 0
@@ -192,3 +221,40 @@ to-report determine-new-bus-type
     report 1
   ]
 end
+
+to send-public-message [message]
+  ;; Send message to all other buses
+  
+  let bus_ids []
+  ask buses [set bus_ids lput bus_id bus_ids]
+  foreach bus_ids 
+  [
+    if not (bus_id = ?)
+    [
+      send-message ? message
+    ]
+  ]  
+end
+;
+;to read-messages
+;  if not (length inbox = 0)
+;  [
+;   let last_message last inbox
+;   if not ((ticks  - (item 0 last_message)) > 50)
+;   [
+;     show item 2 last_message
+;   ]
+;  ]
+;end
+
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                                   BUS COORDINATION 
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+to-report in-area? [destination]
+  report member? destination schedule
+end
+
+
+
+
