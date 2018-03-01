@@ -31,7 +31,16 @@ extensions [table]
 globals [graph]
 
 to init-buses
+  ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
+  ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
+  ; 5: Evertsenstraat, 6: Floradorp, 7: Haarlemmermeerstation, 8: Hasseltweg, 9: Hendrikkade,
+  ; 10: Leidseplein, 11: Lelylaan, 12: Muiderpoort, 13: Museumplein, 14: RAI, 15: SciencePark, 16: Sloterdijk,
+  ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
+
+  set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
+  
   ; Initialize your agents here.
+  set target-stop 0
   set itinerary generate-schedule
   pick-destination
   set called-reinforcements? false
@@ -40,14 +49,6 @@ to init-buses
   set pending-contracts table:make
   set assigned-contracts table:make
   set reactions (list (task message-test-answer)) ; Add new reaction to requests as tasks here
-
-  ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
-  ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
-  ; 5: Evertsenstraat, 6: Floradorp, 7: Haarlemmermeerstation, 8: Hasseltweg, 9: Hendrikkade,
-  ; 10: Leidseplein, 11: Lelylaan, 12: Muiderpoort, 13: Museumplein, 14: RAI, 15: SciencePark, 16: Sloterdijk,
-  ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
-
-  set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
 end
 
 to execute-actions
@@ -128,8 +129,78 @@ end
 
 to pick-destination
   ;; Pick the next destination of the bus
-  set target-stop item 0 itinerary
-  set itinerary remove-item 0 itinerary
+  
+  let utilization length bus_passengers / get-capacity
+  ; If bus is under 50 % utilization -> Pick up more people first
+  ifelse utilization < 0.5
+  [
+    set target-stop pick-most-frequented-station
+    show "Pick most frequented station."
+  ]
+  
+  ; If bus is over 50 % utilization -> Deliver passengers
+  [
+    set target-stop pick-most-requested-station
+    show "Pick most requested station."
+  ]
+  
+  ; If the previous heuristic were indifferent
+  if target-stop = -1
+  [
+    show "Heuristic was insufficent, just pick next stop."
+    ; TODO: Add path if next regular station is further away
+    set target-stop item 0 itinerary
+    set itinerary remove-item 0 itinerary
+  ]
+end
+
+to-report frequency [i lst]
+  report length filter [? = i] lst
+end
+
+to-report pick-most-requested-station
+  ;; Pick next station based on the station most passenger being carried by the bus want to go to 
+  let passenger-destination get-passenger-destinations
+  
+  ; Find frequency of requested stations
+  let destination-freqs map [frequency ? passenger-destination] n-values 24 [? + 1]
+  
+  ; Find most requested stop
+  let max-value max destination-freqs
+  let max-index position max-value destination-freqs
+   
+  ; Don't change schedule is stop is only requested by a few people
+  if max-value > 3
+  [
+    report max-index
+  ]
+ 
+  ; Being indifferent
+  report -1
+end
+
+to-report pick-most-frequented-station
+  ;; Pick next station based on the number of passengers waiting at the stop
+  let neighboring-stops item target-stop graph
+  let waiting-at-stop []
+  
+  foreach neighboring-stops
+  [
+    set waiting-at-stop lput length get-passengers-at-stop ? waiting-at-stop
+  ]
+  
+  ; Find most requested stop
+  let max-value max waiting-at-stop
+  let max-index position max-value waiting-at-stop
+  
+  ; Don't change schedule is stop is only frequented by a few people
+  if max-value > 3
+  [
+    report item max-index neighboring-stops
+  ]
+    
+  ; Being indifferent
+  report -1
 end
 
 to-report generate-schedule
