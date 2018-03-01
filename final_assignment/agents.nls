@@ -150,8 +150,9 @@ to-report pick-destination
   ]
   
   let utilization length bus_passengers / get-capacity
+  let decision-prob random 11  ; Probabilitiy to prioritize 
   ; If bus is under 50 % utilization -> Pick up more people first
-  ifelse utilization < 0.5
+  ifelse decision-prob <= utilization * 10
   [
     set target pick-most-frequented-station
     ;show "Pick most frequented station."
