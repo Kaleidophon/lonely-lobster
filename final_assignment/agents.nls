@@ -41,17 +41,12 @@ to init-buses
   set pending-contracts table:make
   set assigned-contracts table:make
   set reactions (list (task message-test-answer)) ; Add new reaction to requests as tasks here
-  set district []
-  
-  ; Default district is "all" - bus covers whole city
-  let all_stations [
-      3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
-      9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
-      4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
-  ]
-  
-  set district fput "all" district
-  set district fput all_stations district
+  let new-bus-type determine-new-bus-type
+  let new-bus-district determine-new-bus-district
+  set district new-bus-district
+  set itinerary item 1 new-bus-district 
+  show (word "created new bus with district: " item 0 new-bus-district)
+  show district
   
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
@@ -78,7 +73,7 @@ to execute-actions
   ; Check if itinerary is finished, if yes recreate it
   if length itinerary = 0
   [
-    set itinerary item 1 district
+    set itinerary item 1 district 
   ]
 
   ifelse current_stop = target-stop
@@ -173,7 +168,7 @@ to call-in-reinforcements
     add-bus new-bus-type
     set called-reinforcements? true
 
-    ; Init a new bus
+    ; Find newly created bus 
     ask buses with [ current_stop = 3  ] [
       set district new-bus-district
       set itinerary item 1 new-bus-district 
@@ -236,11 +231,11 @@ end
 
 to-report determine-new-bus-district
   let districts table:make
-  table:put districts "all" [
-      3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
-      9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
-      4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
-  ]
+;  table:put districts "all" [
+;      3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
+;      9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
+;      4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+;  ]
   
   table:put districts "noord" [
     3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
@@ -257,17 +252,28 @@ to-report determine-new-bus-district
   let assigned-district []  
   let max-no-waiting 0 
   
+  ifelse bus_id = 24 
+  [
+    set assigned-district fput [
+      3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
+      9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
+      4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+  ] assigned-district
+    set assigned-district fput "all" assigned-district
+  ]
+  [    
   foreach table:keys districts [
     let district_name ?
     let stations table:get districts district_name 
-    let total-waiting-in-district 0 
+    let total-waiting-in-district 0
     foreach stations [
       set total-waiting-in-district (total-waiting-in-district + (length get-passengers-at-stop ?))
       if total-waiting-in-district > max-no-waiting [
         set max-no-waiting total-waiting-in-district
-        set assigned-district fput district_name assigned-district
-        set assigned-district fput stations assigned-district        
+        set assigned-district fput stations assigned-district   
+        set assigned-district fput district_name assigned-district  
       ]
+    ]
     ]
   ]
     report assigned-district 
