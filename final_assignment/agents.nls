@@ -72,7 +72,7 @@ to execute-actions
     set itinerary generate-schedule
   ]
 
-  ifelse current_stop = target-stop
+  ifelse current_stop = target-stop or member? current_stop return-path
   ; Bus is at a station
   [
     drop-off-at-station
@@ -137,7 +137,7 @@ to-report pick-destination
   ;;        Utilization > 50 %: Try to pick next stop based on the passengers in the bus. Report most requested station
   ;;        Utilization < 50 %: Try to pick next stop based on passengers waiting there. Report most frequented station
   ;;        3. No good decision could be made: Return to schedule. 
-  let target 0
+  let target -1
   
   ; Return to original schedule after heuristics 
   if length return-path > 0
@@ -152,14 +152,16 @@ to-report pick-destination
   let utilization length bus_passengers / get-capacity
   let decision-prob random 11  ; Probabilitiy to prioritize 
   ; If bus is under 50 % utilization -> Pick up more people first
-  ifelse decision-prob <= utilization * 10
+  if decision-prob >= utilization * 10
   [
     set target pick-most-frequented-station
     ;show "Pick most frequented station."
     ;show (word "Picked " target)
   ]
   
+  set decision-prob random 11  ; Probabilitiy to prioritize, roll again
   ; If bus is over 50 % utilization -> Deliver passengers
+  if decision-prob <= utilization * 10 and target = -1
   [
     set target pick-most-requested-station
     ;show "Pick most requested station."
@@ -170,7 +172,6 @@ to-report pick-destination
   if target = -1
   [
     ;show "Heuristic was insufficent, just pick next stop."
-    ; TODO: Add path if next regular station is further away
     set target item 0 itinerary
     ;show (word "Checking shortest path from " current_stop " to " target)
     let raw-return-path get-path-destination current_stop target
