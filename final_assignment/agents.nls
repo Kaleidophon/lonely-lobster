@@ -24,7 +24,8 @@ buses-own [
   capacity                ; Total capacity of bus
   pending-contracts       ; table of open / pending requests to other buses
   assigned-contracts      ; table of requests received by other buses
-  reactions               ; List of tasks of function that are used to react to an incoming request by another bus             
+  reactions               ; List of tasks of function that are used to react to an incoming request by another bus  
+  district                ; District that a bus is assigned to          
 ]
  
 extensions [table]
@@ -40,7 +41,18 @@ to init-buses
   set pending-contracts table:make
   set assigned-contracts table:make
   set reactions (list (task message-test-answer)) ; Add new reaction to requests as tasks here
-
+  set district []
+  
+  ; Default district is "all" - bus covers whole city
+  let all_stations [
+      3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
+      9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
+      4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+  ]
+  
+  set district fput "all" district
+  set district fput all_stations district
+  
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
   ; 5: Evertsenstraat, 6: Floradorp, 7: Haarlemmermeerstation, 8: Hasseltweg, 9: Hendrikkade,
@@ -66,7 +78,7 @@ to execute-actions
   ; Check if itinerary is finished, if yes recreate it
   if length itinerary = 0
   [
-    set itinerary generate-schedule
+    set itinerary item 1 district
   ]
 
   ifelse current_stop = target-stop
@@ -135,17 +147,17 @@ end
 to-report generate-schedule
   ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
   ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
-  let schedule [
-    3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
-    9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
-    4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
-  ]
+    let schedule [
+      3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
+      9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
+      4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+    ]
 
   ;; Let buses drive the route into the other direction with a 50:50 probability
-  if random 2 = 0
-  [
-    set schedule reverse schedule
-  ]
+;  if random 2 = 0
+;  [
+;    set schedule reverse schedule
+;  ]
 
   report schedule
 end
@@ -157,12 +169,15 @@ to call-in-reinforcements
   if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
   [
     let new-bus-type determine-new-bus-type
+    let new-bus-district determine-new-bus-district
     add-bus new-bus-type
     set called-reinforcements? true
 
     ; Init a new bus
-    ask buses with [ current_stop = 3 and not initialized? ] [
-      init-buses
+    ask buses with [ current_stop = 3  ] [
+      set district new-bus-district
+      set itinerary item 1 new-bus-district 
+      show (word "created new bus with district: " item 0 new-bus-district)
     ]
   ]
 end
@@ -217,5 +232,44 @@ to-report determine-new-bus-type
   [
     report 1
   ]
+end
+
+to-report determine-new-bus-district
+  let districts table:make
+  table:put districts "all" [
+      3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
+      9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
+      4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+  ]
+  
+  table:put districts "noord" [
+    3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
+  ]
+  
+  table:put districts "oost" [
+      9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
+  ]  
+  
+  table:put districts "west" [
+      4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+  ]
+  
+  let assigned-district []  
+  let max-no-waiting 0 
+  
+  foreach table:keys districts [
+    let district_name ?
+    let stations table:get districts district_name 
+    let total-waiting-in-district 0 
+    foreach stations [
+      set total-waiting-in-district (total-waiting-in-district + (length get-passengers-at-stop ?))
+      if total-waiting-in-district > max-no-waiting [
+        set max-no-waiting total-waiting-in-district
+        set assigned-district fput district_name assigned-district
+        set assigned-district fput stations assigned-district        
+      ]
+    ]
+  ]
+    report assigned-district 
 end
 
