@@ -24,15 +24,15 @@ buses-own [
   capacity                ; Total capacity of bus
   pending-contracts       ; table of open / pending requests to other buses
   assigned-contracts      ; table of requests received by other buses
-  reactions               ; List of tasks of function that are used to react to an incoming request by another bus             
+  reactions               ; List of tasks of function that are used to react to an incoming request by another bus
 ]
- 
+
 extensions [table]
 globals [graph]
 
 to init-buses
   ; Initialize your agents here.
-  set itinerary generate-schedule
+  ; set itinerary generate-schedule
   pick-destination
   set called-reinforcements? false
   set initialized? true
@@ -82,6 +82,8 @@ to execute-actions
     travel-to target-stop
   ]
 
+  show (word "Maximum waiting stop: " get-max-waiting-stop)
+
 end
 
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -113,12 +115,12 @@ end
 to-report get-passenger-destinations
   ;; Return the destinations of all passengers as a list
   let destinations []
-  
+
   foreach bus_passengers
   [
     set destinations fput item 1 ? destinations
   ]
-  
+
   report destinations
 end
 
@@ -126,29 +128,49 @@ end
 ;;                                   BUS LOGIC
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
+; ; Old pick destination
+; to pick-destination
+;   ;; Pick the next destination of the bus
+;   set target-stop item 0 itinerary
+;   set itinerary remove-item 0 itinerary
+; end
+;
+; ; Old generate schedule
+; to-report generate-schedule
+;   ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
+;   ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
+;   let schedule [
+;     3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
+;     9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
+;     4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+;   ]
+;
+;   report schedule
+; end
+
+; New pick destination
 to pick-destination
-  ;; Pick the next destination of the bus
-  set target-stop item 0 itinerary
-  set itinerary remove-item 0 itinerary
-end
 
-to-report generate-schedule
-  ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
-  ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
-  let schedule [
-    3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
-    9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
-    4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
-  ]
-
-  ;; Let buses drive the route into the other direction with a 50:50 probability
-  if random 2 = 0
+  if ticks-since-init = 0
   [
-    set schedule reverse schedule
+    set target-stop get-max-waiting-stop
+  ]
+  [
+    let max-destination-tuple get-max-passenger-stop
+    let max-waiting-stop get-max-waiting-stop
+    let max-waiting-stop-tuple [max-waiting-stop length get-passengers-at-stop max-waiting-stop]
+
+    if item 1 max-destination-tuple > item 1 max-waiting-stop-tuple
+    [
+      set target-stop item 0 max-destination-tuple
+    ]
+    [
+      set target-stop item 0 max-waiting-stop-tuple
+    ]
   ]
 
-  report schedule
 end
+
 
 to call-in-reinforcements
   ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
@@ -219,3 +241,95 @@ to-report determine-new-bus-type
   ]
 end
 
+to-report get-max-waiting-stop
+  let max-waiting-stop 3
+  let max-waiting-passengers -1
+  let bus-stop 0
+
+  while [ bus-stop != 23 ]
+  [
+    let waiting-passengers length get-passengers-at-stop bus-stop
+    if max-waiting-passengers < waiting-passengers
+    [
+      set max-waiting-stop bus-stop
+      set max-waiting-passengers waiting-passengers
+    ]
+    set bus-stop bus-stop + 1
+  ]
+
+  report max-waiting-stop
+end
+
+to-report get-max-passenger-stop
+  let passenger-at-stop get-passengers-at-stop current_stop
+  let destination-counter table:make
+  let bus-stop-i 0
+  let max-passenger-stop 0
+  let max-passenger-stop-count -1
+
+  while [bus-stop-i <= 23]
+  [
+    table:put destination-counter bus-stop-i 0
+    set bus-stop-i bus-stop-i + 1
+  ]
+
+  foreach passenger-at-stop
+  [
+    let destination-passengers table:get destination-counter item 1 ?
+    table:put destination-counter item 1 ? destination-passengers + 1
+  ]
+
+  foreach table:to-list destination-counter
+  [
+    if item 1 ? > max-passenger-stop-count
+    [
+      set max-passenger-stop-count item 1 ?
+      set max-passenger-stop item 0 ?
+    ]
+  ]
+
+  report [max-passenger-stop max-passenger-stop-count]
+
+end
+
+; to-report get-passenger-destinations
+;   ;; Return the destinations of all passengers as a list
+;   let destinations []
+;
+;   foreach bus_passengers
+;   [
+;     set destinations fput item 1 ? destinations
+;   ]
+;
+;   report destinations
+; end
+
+; to-report pick-most-requested-station
+;   ;; Pick next station based on the station most passenger being carried by the bus want to go to
+;   let passenger-destination get-passenger-destinations
+;
+;   ; Find frequency of requested stations
+;   let destination-freqs map [frequency ? passenger-destination] n-values 24 [? + 1]
+;
+;   ; Find most requested stop
+;   let max-value max destination-freqs
+;   let max-index position max-value destination-freqs
+;
+;   ; Don't change schedule is stop is only requested by a few people
+;   if max-value > 3 and max-index != current_stop
+;   [
+;     ;show (word "Checking shortest path from " current_stop " to most requested " max-index)
+;     let raw-return-path get-path-destination current_stop max-index
+;
+;     if length raw-return-path > 1
+;     [
+;       ;show (word "Shortest return path to most requested is " raw-return-path)
+;       set return-path raw-return-path
+;       let target item 0 return-path
+;       set return-path remove-item 0 return-path
+;
+;       report target
+;     ]
+;
+;     report max-index
+;   ]
