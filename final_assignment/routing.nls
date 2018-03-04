@@ -64,7 +64,7 @@ to-report get-path-destination
     set shortest-path fput backtrack-stop shortest-path
   ]
 
-  show (word "Shortest path" shortest-path)
+;  show (word "Shortest path" shortest-path)
 
   report shortest-path
 end
