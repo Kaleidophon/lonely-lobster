@@ -9,6 +9,7 @@ from collections import defaultdict
 
 # EXT
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def read_eval_data_file(path):
@@ -29,10 +30,20 @@ def read_eval_data_file(path):
     return times, dates
 
 
-def create_plots(times, dates):
+def create_plots(times, data, image_dir, identifier):
     """ Plot the development of metrics over time. """
-    # TODO
-    pass
+    identifier = "_" + identifier if identifier != "" else ""
+
+    for metric, measurements in data.items():
+        x = range(len(measurements))
+
+        # Manage figure
+        plt.plot(x, measurements)
+        plt.ylabel(metric.replace("_", " ").lower())
+        plt.xlabel("minutes")
+
+        plt.savefig("{}{}{}.png".format(image_dir, metric.lower(), identifier))
+        plt.close()
 
 
 def compute_metrics(data, result_path, identifier):
@@ -86,3 +97,4 @@ if __name__ == "__main__":
 
     times, data = read_eval_data_file(args.file)
     compute_metrics(data, args.out, args.identifier)
+    create_plots(times, data, args.img, args.identifier)
