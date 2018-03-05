@@ -43,9 +43,8 @@ to init-buses
   ; Initialize your agents here.
   set target-stop 0
   set itinerary generate-schedule
-  set return-path []
   set known-buses []
-  set target-stop pick-destination
+  pick-destination
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
@@ -79,7 +78,7 @@ to execute-actions
   [
     drop-off-at-station
     pick-up-at-station
-    set target-stop pick-destination
+    pick-destination
   ]
   ; Bus is still on the road
   [
@@ -130,7 +129,7 @@ end
 ;;                                   BUS LOGIC
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
-to-report pick-destination
+to pick-destination
   ;; Pick the next destination of the bus
   set target-stop item 0 itinerary
   set itinerary remove-item 0 itinerary
