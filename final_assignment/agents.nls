@@ -24,10 +24,10 @@ buses-own [
   capacity                ; Total capacity of bus
   pending-contracts       ; table of open / pending requests to other buses
   assigned-contracts      ; table of requests received by other buses
-  reactions               ; List of tasks of function that are used to react to an incoming request by another bus  
+  reactions               ; List of tasks of function that are used to react to an incoming request by another bus
   known-buses             ; List of other known buses
 ]
- 
+
 extensions [table]
 globals [graph]
 
@@ -39,7 +39,7 @@ to init-buses
   ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
 
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
-  
+
   ; Initialize your agents here.
   set target-stop 0
   set itinerary generate-schedule
@@ -52,8 +52,7 @@ to init-buses
   set pending-contracts table:make
   set assigned-contracts table:make
   set reactions (list (task remember-id) (task update-blacklist)) ; Add new reaction to requests as tasks here
-  set demand-treshold 3
-  
+
   tell-buses-id
 end
 
@@ -75,7 +74,7 @@ to execute-actions
     set itinerary generate-schedule
   ]
 
-  ifelse current_stop = target-stop or member? current_stop return-path
+  ifelse current_stop = target-stop
   ; Bus is at a station
   [
     drop-off-at-station
@@ -108,7 +107,7 @@ to pick-up-at-station
   ;; Pick up all the passenger at a bus stop.
   foreach get-passengers-at-stop current_stop
   [
-    if not bus-full? and (member? item 1 ? itinerary or member? item 1 ? return-path)  ; If passenger wants to go to a station on the schedule
+    if not bus-full?
     [
       pick-up-passenger item 0 ?
     ]
@@ -118,12 +117,12 @@ end
 to-report get-passenger-destinations
   ;; Return the destinations of all passengers as a list
   let destinations []
-  
+
   foreach bus_passengers
   [
     set destinations fput item 1 ? destinations
   ]
-  
+
   report destinations
 end
 
@@ -135,68 +134,6 @@ to-report pick-destination
   ;; Pick the next destination of the bus
   set target-stop item 0 itinerary
   set itinerary remove-item 0 itinerary
-end
-
-to-report frequency [i lst]
-  report length filter [? = i] lst
-end
-
-to-report pick-most-requested-station
-  ;; Pick next station based on the station most passenger being carried by the bus want to go to 
-  let passenger-destination get-passenger-destinations
-  
-  ; Find frequency of requested stations
-  let destination-freqs map [frequency ? passenger-destination] n-values 24 [? + 1]
-  
-  ; Find most requested stop
-  let max-value max destination-freqs
-  let max-index position max-value destination-freqs
-   
-  ; Don't change schedule is stop is only requested by a few people
-  if max-value > demand-treshold and max-index != current_stop
-  [
-    ;show (word "Checking shortest path from " current_stop " to most requested " max-index)
-    let raw-return-path get-path-destination current_stop max-index
-    
-    if length raw-return-path > 1
-    [
-      ;show (word "Shortest return path to most requested is " raw-return-path)
-      set return-path raw-return-path
-      let target item 0 return-path
-      set return-path remove-item 0 return-path
-      
-      report target
-    ]
-    
-    report max-index
-  ]
- 
-  ; Being indifferent
-  report -1
-end
-
-to-report pick-most-frequented-station
-  ;; Pick next station based on the number of passengers waiting at the stop
-  let neighboring-stops item current_stop graph
-  let waiting-at-stop []
-  
-  foreach neighboring-stops
-  [
-    set waiting-at-stop lput length get-passengers-at-stop ? waiting-at-stop
-  ]
-  
-  ; Find most requested stop
-  let max-value max waiting-at-stop
-  let max-index position max-value waiting-at-stop
-  
-  ; Don't change schedule is stop is only frequented by a few people
-  if max-value > demand-treshold
-  [
-    report item max-index neighboring-stops
-  ]
-    
-  ; Being indifferent
-  report -1
 end
 
 to-report generate-schedule
@@ -285,4 +222,3 @@ to-report determine-new-bus-type
     report 1
   ]
 end
-
