@@ -21,7 +21,6 @@
 
 to process-inbox
   ;; Process inbox, generate new assigned contracts for every contract received by another bus
-  show inbox
   while [ length inbox > 0 ]
   [
     let current-mail item 0 inbox
@@ -44,8 +43,6 @@ end
 to answer-questions
   ;; Answer requests by other buses
   ;; Put all the logic a bus uses to react to a certain request here
-  
-  show assigned-contracts
   foreach table:keys assigned-contracts
   [
     ;; Perform reactions to a message
@@ -55,9 +52,7 @@ to answer-questions
     while [ not reacted? and reaction-index < length reactions ]
     [
       let current-reaction item reaction-index reactions
-      show reacted?
       let current-contract table:get assigned-contracts ?
-      show current-reaction
       set reacted? (runresult current-reaction current-contract)
 
       set reaction-index reaction-index + 1
@@ -107,8 +102,6 @@ to-report remember-id [ request ]
     let new-bus-id table:get request "content"
     set known-buses fput new-bus-id known-buses
     
-    show "About to fulfill"
-    show assigned-contracts
     report fulfill-assigned-contract contract-id
   ]
 
@@ -165,7 +158,7 @@ end
 to add-pending-contract [ contract-id callback ]
   ;; Add a new contract to the table of pending contracts
   table:put pending-contracts contract-id callback
-  show (word "Generated new pending contract " contract-id)
+  ;show (word "Generated new pending contract " contract-id)
 end
 
 to-report fulfill-pending-contract [ contract-id response ]
@@ -173,7 +166,7 @@ to-report fulfill-pending-contract [ contract-id response ]
   carefully [
     let callback table:get pending-contracts contract-id
     table:remove pending-contracts contract-id ; Remove contract; it has been fulfilled
-    show (word "Fulfilling pending contract " contract-id)
+    ;show (word "Fulfilling pending contract " contract-id)
     report (runresult callback response) ; Feed the response of another bus into the contract callback
   ]
   [
@@ -184,14 +177,20 @@ end
 to add-assigned-contract [ contract-id request ]
   ;; Add a new contract to the table of contracts assigned to this bus
   table:put assigned-contracts contract-id request
-  show (word "Received assigned contract " contract-id)
+  ;show (word "Received assigned contract " contract-id)
 end
 
 to-report fulfill-assigned-contract [ contract-id ]
   ;; Fulfill a contract that has been assigned to this bus by another bus
-  table:remove assigned-contracts contract-id ; Remove contract; it has been fulfilled
-  show (word "Fulfilling assigned contract " contract-id)
-  report true
+  let fulfilled? false
+  carefully [
+    table:remove assigned-contracts contract-id ; Remove contract; it has been fulfilled
+    ;show (word "Fulfilling assigned contract " contract-id)
+    set fulfilled? true
+  ]
+  []
+  
+  report fulfilled?
 end
 
 to-report create-message [ contract-id contract-from contract-to receiver action content ]
