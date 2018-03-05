@@ -25,7 +25,9 @@ buses-own [
   pending-contracts       ; table of open / pending requests to other buses
   assigned-contracts      ; table of requests received by other buses
   reactions               ; List of tasks of function that are used to react to an incoming request by another bus
-  return-path             ; List of stations the bus drives by to return to schedule            
+  return-path             ; List of stations the bus drives by to return to schedule        
+  demand-treshold         ; Number of passengers that have to be at a station / have to request a station for the bus to deviate from schedule   
+  known-buses             ; List of other known buses
 ]
  
 extensions [table]
@@ -44,13 +46,17 @@ to init-buses
   set target-stop 0
   set itinerary generate-schedule
   set return-path []
+  set known-buses []
   set target-stop pick-destination
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
   set pending-contracts table:make
   set assigned-contracts table:make
-  set reactions (list (task message-test-answer)) ; Add new reaction to requests as tasks here
+  set reactions (list (task remember-id) (task update-blacklist)) ; Add new reaction to requests as tasks here
+  set demand-treshold 3
+  
+  tell-buses-id
 end
 
 to execute-actions
@@ -64,7 +70,6 @@ to execute-actions
   ; Message management
   process-inbox
   answer-questions
-  ask-questions
 
   ; Check if itinerary is finished, if yes recreate it
   if length itinerary = 0
@@ -105,7 +110,7 @@ to pick-up-at-station
   ;; Pick up all the passenger at a bus stop.
   foreach get-passengers-at-stop current_stop
   [
-    if not bus-full?
+    if not bus-full? and (member? item 1 ? itinerary or member? item 1 ? return-path)  ; If passenger wants to go to a station on the schedule
     [
       pick-up-passenger item 0 ?
     ]
@@ -149,24 +154,20 @@ to-report pick-destination
      report target
   ]
   
-  let utilization length bus_passengers / get-capacity
-  let decision-prob random 11  ; Probabilitiy to prioritize 
+  ;let utilization length bus_passengers / get-capacity
+  ;let decision-prob random 11  ; Probabilitiy to prioritize 
   ; If bus is under 50 % utilization -> Pick up more people first
-  if decision-prob >= utilization * 10
-  [
-    set target pick-most-frequented-station
-    ;show "Pick most frequented station."
-    ;show (word "Picked " target)
-  ]
-  
-  set decision-prob random 11  ; Probabilitiy to prioritize, roll again
-  ; If bus is over 50 % utilization -> Deliver passengers
-  if decision-prob <= utilization * 10 and target = -1
-  [
-    set target pick-most-requested-station
+  ;ifelse decision-prob < utilization * 10 
+  ;[
+  ;  set target pick-most-requested-station
     ;show "Pick most requested station."
     ;show (word "Picked " target)
-  ]
+  ;]
+  ;[
+  ;  set target pick-most-frequented-station
+    ;show "Pick most frequented station."
+    ;show (word "Picked " target)
+  ;]
   
   ; If the previous heuristic were indifferent
   if target = -1
@@ -208,7 +209,7 @@ to-report pick-most-requested-station
   let max-index position max-value destination-freqs
    
   ; Don't change schedule is stop is only requested by a few people
-  if max-value > 3 and max-index != current_stop
+  if max-value > demand-treshold and max-index != current_stop
   [
     ;show (word "Checking shortest path from " current_stop " to most requested " max-index)
     let raw-return-path get-path-destination current_stop max-index
@@ -245,7 +246,7 @@ to-report pick-most-frequented-station
   let max-index position max-value waiting-at-stop
   
   ; Don't change schedule is stop is only frequented by a few people
-  if max-value > 3
+  if max-value > demand-treshold
   [
     report item max-index neighboring-stops
   ]
