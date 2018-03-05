@@ -25,6 +25,7 @@ buses-own [
   pending-contracts       ; table of open / pending requests to other buses
   assigned-contracts      ; table of requests received by other buses
   reactions               ; List of tasks of function that are used to react to an incoming request by another bus
+  known-buses             ; List of other known buses
   district                ; District that a bus is assigned to
 ]
 
@@ -32,21 +33,6 @@ extensions [table]
 globals [graph]
 
 to init-buses
-  ; Initialize your agents here.
-  set itinerary generate-schedule
-  pick-destination
-  set called-reinforcements? false
-  set initialized? true
-  set ticks-since-init 0
-  set pending-contracts table:make
-  set assigned-contracts table:make
-  set reactions (list (task message-test-answer)) ; Add new reaction to requests as tasks here
-  let new-bus-type determine-new-bus-type
-  let new-bus-district determine-new-bus-district
-  set district new-bus-district
-  set itinerary item 1 new-bus-district
-  show (word "created new bus with district: " item 0 new-bus-district)
-
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
   ; 5: Evertsenstraat, 6: Floradorp, 7: Haarlemmermeerstation, 8: Hasseltweg, 9: Hendrikkade,
@@ -54,6 +40,25 @@ to init-buses
   ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
 
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
+
+  ; Initialize your agents here.
+  set target-stop 0
+  set itinerary generate-schedule
+  set known-buses []
+  pick-destination
+  set called-reinforcements? false
+  set initialized? true
+  set ticks-since-init 0
+  set pending-contracts table:make
+  set assigned-contracts table:make
+  set reactions (list (task remember-id) (task update-blacklist)) ; Add new reaction to requests as tasks here
+  let new-bus-type determine-new-bus-type
+  let new-bus-district determine-new-bus-district
+  set district new-bus-district
+  set itinerary item 1 new-bus-district
+  show (word "created new bus with district: " item 0 new-bus-district)
+
+  tell-buses-id
 end
 
 to execute-actions
@@ -67,7 +72,6 @@ to execute-actions
   ; Message management
   process-inbox
   answer-questions
-  ask-questions
 
   ; Check if itinerary is finished, if yes recreate it
   if length itinerary = 0
@@ -81,7 +85,6 @@ to execute-actions
     drop-off-at-station
     pick-up-at-station
     pick-destination
-    set path-destination get-path-destination
   ]
   ; Bus is still on the road
   [
