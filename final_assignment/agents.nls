@@ -21,6 +21,7 @@ buses-own [
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
   path-destination        ; Records the shortest path to the destination
+  blacklisted-stops       ; Records the stops it isn't supposed to use as destination
   capacity                ; Total capacity of bus
   pending-contracts       ; table of open / pending requests to other buses
   assigned-contracts      ; table of requests received by other buses
@@ -31,15 +32,6 @@ extensions [table]
 globals [graph]
 
 to init-buses
-  ; Initialize your agents here.
-  ; set itinerary generate-schedule
-  pick-destination
-  set called-reinforcements? false
-  set initialized? true
-  set ticks-since-init 0
-  set pending-contracts table:make
-  set assigned-contracts table:make
-  set reactions (list (task message-test-answer)) ; Add new reaction to requests as tasks here
 
   ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
   ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
@@ -48,6 +40,18 @@ to init-buses
   ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
 
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
+
+  ; Initialize your agents here.
+  pick-destination
+  show (word "Destination: " target-stop)
+  set itinerary get-path-destination
+  show (word "New Itinerary: " itinerary)
+  set called-reinforcements? false
+  set initialized? true
+  set ticks-since-init 0
+  ; set pending-contracts table:make
+  ; set assigned-contracts table:make
+  ; set reactions (list (task message-test-answer)) ; Add new reaction to requests as tasks here
 end
 
 to execute-actions
@@ -59,30 +63,46 @@ to execute-actions
   set ticks-since-init ticks-since-init + 1
 
   ; Message management
-  process-inbox
-  answer-questions
-  ask-questions
+  ; process-inbox
+  ; answer-questions
+  ; ask-questions
 
   ; Check if itinerary is finished, if yes recreate it
-  if length itinerary = 0
-  [
-    set itinerary generate-schedule
-  ]
+  ; if length itinerary = 0
+  ; [
+  ;   set itinerary generate-schedule
+  ; ]
 
   ifelse current_stop = target-stop
   ; Bus is at a station
   [
+    show (word "At destination")
     drop-off-at-station
-    pick-up-at-station
     pick-destination
-    set path-destination get-path-destination
+    ; show (word "Destination: " target-stop)
+    pick-up-at-station
+    set itinerary get-path-destination
+    ; show (word "New Itinerary: " itinerary)
   ]
   ; Bus is still on the road
   [
-    travel-to target-stop
+    show (word "Still on road at " current_stop)
+    show (word "Next-stop " next_stop)
+    ifelse current_stop = -1
+    [
+      travel-to next_stop
+    ]
+    [
+      drop-off-at-station
+      pick-up-at-station
+      let got-to-stop item 0 itinerary
+      set itinerary remove-item 0 itinerary
+      ; show (word "Go-to-stop " got-to-stop)
+      travel-to got-to-stop
+    ]
   ]
 
-  show (word "Maximum waiting stop: " get-max-waiting-stop)
+  ; show (word "Maximum waiting stop: " get-max-waiting-stop)
 
 end
 
@@ -101,16 +121,35 @@ to drop-off-at-station
   ]
 end
 
+; ; Old pick-up-at-station
+; to pick-up-at-station
+;   ;; Pick up all the passenger at a bus stop.
+;   foreach get-passengers-at-stop current_stop
+;   [
+;     if not bus-full?
+;     [
+;       pick-up-passenger item 0 ?
+;     ]
+;   ]
+; end
+
+; New pick-up-at-station
 to pick-up-at-station
-  ;; Pick up all the passenger at a bus stop.
-  foreach get-passengers-at-stop current_stop
+  ;; Pick up all the passengers whose destination is in the itinerary
+  foreach itinerary
   [
-    if not bus-full?
+    let stop-i ?
+
+    foreach get-passengers-at-stop current_stop
     [
-      pick-up-passenger item 0 ?
+      if not bus-full? and item 1 ? = stop-i
+      [
+        pick-up-passenger item 0 ?
+      ]
     ]
   ]
 end
+
 
 to-report get-passenger-destinations
   ;; Return the destinations of all passengers as a list
@@ -151,21 +190,35 @@ end
 ; New pick destination
 to pick-destination
 
-  if ticks-since-init = 0
+  ifelse ticks-since-init = 0
   [
     set target-stop get-max-waiting-stop
   ]
   [
     let max-destination-tuple get-max-passenger-stop
     let max-waiting-stop get-max-waiting-stop
-    let max-waiting-stop-tuple [max-waiting-stop length get-passengers-at-stop max-waiting-stop]
+    let max-waiting-stop-tuple []
+    set max-waiting-stop-tuple fput max-waiting-stop max-waiting-stop-tuple
+    set max-waiting-stop-tuple lput length get-passengers-at-stop max-waiting-stop max-waiting-stop-tuple
 
-    if item 1 max-destination-tuple > item 1 max-waiting-stop-tuple
+    ifelse item 1 max-destination-tuple > item 1 max-waiting-stop-tuple
     [
-      set target-stop item 0 max-destination-tuple
+      ifelse current_stop != item 0 max-destination-tuple
+      [
+        set target-stop item 0 max-destination-tuple
+      ]
+      [
+        set target-stop item 0 max-waiting-stop-tuple
+      ]
     ]
     [
-      set target-stop item 0 max-waiting-stop-tuple
+      ifelse current_stop != item 0 max-waiting-stop-tuple
+      [
+        set target-stop item 0 max-waiting-stop-tuple
+      ]
+      [
+        set target-stop item 0 max-destination-tuple
+      ]
     ]
   ]
 
@@ -288,7 +341,11 @@ to-report get-max-passenger-stop
     ]
   ]
 
-  report [max-passenger-stop max-passenger-stop-count]
+  let max-passenger-stop-tuple []
+  set max-passenger-stop-tuple fput max-passenger-stop max-passenger-stop-tuple
+  set max-passenger-stop-tuple lput max-passenger-stop-count max-passenger-stop-tuple
+
+  report max-passenger-stop-tuple
 
 end
 

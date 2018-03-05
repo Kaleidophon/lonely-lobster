@@ -61,10 +61,13 @@ to-report get-path-destination
   [
     set backtrack-stop table:get backtrack backtrack-stop
     ; Keep adding the previous node to the shortest path while backtracking to the source
-    set shortest-path fput backtrack-stop shortest-path
+    if backtrack-stop != current_stop
+    [
+      set shortest-path fput backtrack-stop shortest-path
+    ]
   ]
 
-  show (word "Shortest path" shortest-path)
+  ; show (word "Shortest path" shortest-path)
 
   report shortest-path
 end
