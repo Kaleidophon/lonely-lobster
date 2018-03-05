@@ -50,6 +50,13 @@ to setup
   update-bus-stops
   setup-costs
   add-bus 1
+
+  ;; CUSTOM CODE ONLY TO WRITE SOME METRICS INTO A FILE FOR LATER
+  if file-exists? "default_eval.txt"
+  [
+    file-delete "default_eval.txt"
+  ]
+  ;; END CUSTOM CODE
 end
 
 to calculate-average-travelling-time
@@ -133,6 +140,28 @@ to update-passengers-statistics
   if (length n2 > 0) [
     set average_travelling_time_remaining (sum_temp2 / length n2)
   ]
+
+  ;; CUSTOM CODE ONLY TO WRITE SOME METRICS INTO A FILE FOR LATER
+  let total_number_travelling_passengers 0
+  let total_capacity 0
+  ask buses
+  [
+    set total_number_travelling_passengers total_number_travelling_passengers + length bus_passengers
+    set total_capacity total_capacity + get-capacity
+  ]
+  let average_utilization 0
+  if total_capacity > 0
+  [
+    set average_utilization total_number_travelling_passengers / total_capacity
+  ]
+
+  file-open "default_eval.txt"
+  file-write current_time file-write "EXPENSES" file-write expenses file-print ""
+  file-write current_time file-write "AVERAGE_WAITING_TIME" file-write average_waiting_time file-print ""
+  file-write current_time file-write "AMOUNT_PASSENGERS_WAITING" file-write amount_passengers_waiting file-print ""   file-write current_time file-write "NUMBER_OF_MESSAGES" file-write number_of_messages file-print ""   file-write current_time file-write "AVERAGE_TRAVELLING_TIME" file-write average_travelling_time file-print ""   file-write current_time file-write "FINAL_AVERAGE_TRAVELLING_TIME" file-write final_average_travelling_time file-print ""
+  file-write current_time file-write "AVERAGE_UTILIZATION" file-write average_utilization file-print ""   file-flush
+  file-close
+  ;; END CUSTOM CODE
 end
 
 to setup-costs

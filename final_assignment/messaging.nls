@@ -40,12 +40,6 @@ to process-inbox
   ]
 end
 
-to ask-questions
-  ;; Ask other buses for some sort of information
-  ;; Put all the requests done during every tick here
-  message-test-request
-end
-
 to answer-questions
   ;; Answer requests by other buses
   ;; Put all the logic a bus uses to react to a certain request here
@@ -67,38 +61,110 @@ to answer-questions
 
 end
 
-to message-test-request
+to tell-buses-id
   ;; Have a bus introduce itself after its creation
-  ;; TODO: This is just to test the messaging logic. Remove later.
 
-  if ticks-since-init = 1 ; Introduce bus to other buses only once
+  let action "TELL-ID"
+  let content bus_id
+
+  let bus-index 24
+
+  ; Send message to all other buses
+  while [ bus-index < bus_id ]
   [
-     let action "ASK"
-     let content (word "I am bus " bus_id ". Please return my handshake?")
-
-     let bus_index 24
-
-     ; Send message to all other buses
-     while [ bus_index < bus_id ]
-     [
-       send-message-with-contract bus_index action content (task message-test-callback)
-       set bus_index bus_index + 1
-     ]
+    send-message-with-oneway-contract bus-index action content
+    set known-buses fput bus-index known-buses
+    set bus-index bus-index + 1
   ]
 end
 
-to-report message-test-answer [ request ]
+to-report update [ response ]
+  ;; Verify that the handshake has been successful.
+  ;; TODO: This is just to test the messaging logic. Remove later.
+
+  let sender table:get response "sender"
+  let content table:get response "content"
+
+  show (word "Bus " sender " says: " content)
+  report true
+end
+
+to tell-going-to [other-buses]
+  ;; Have a bus introduce itself after its creation
+  let action "TELL-GOING-TO"
+  let content target-stop
+
+  ; Send message to all other buses
+  foreach other-buses
+  [
+    send-message-with-oneway-contract ? action content
+  ]
+end
+
+to tell-reached
+  ;; Have a bus introduce itself after its creation
+  let action "TELL-REACHED"
+  let content current_stop
+
+  ; Send message to all other buses
+  foreach known-buses
+  [
+    send-message-with-oneway-contract ? action content
+  ]
+end
+
+to-report remember-id [ request ]
   let sender-action table:get request "action"
 
-  if sender-action = "ASK"
+  if sender-action = "TELL-ID"
   [
     let sender-id table:get request "sender"
     let contract-id table:get request "contract-id"
-    let response (word "Hello bus " sender-id "!")
-    let action "RESPOND"
 
-    let message create-message contract-id table:get request "contract-from" table:get request "contract-to" sender-id action response
-    send-message sender-id message
+    ; Remember id
+    let new-bus-id table:get request "content"
+    set known-buses fput new-bus-id known-buses
+
+    let sender-list []
+    set sender-list fput sender-id sender-list
+    tell-going-to sender-list
+
+    report fulfill-assigned-contract contract-id
+  ]
+
+  report false
+end
+
+to-report add-to-blacklist [ request ]
+  let sender-action table:get request "action"
+
+  if sender-action = "TELL-GOING-TO"
+  [
+    let sender-id table:get request "sender"
+    let contract-id table:get request "contract-id"
+
+    ; Add the sender destination to the blacklist
+    let sender-destination table:get request "content"
+    set blacklisted-stops fput sender-destination blacklisted-stops
+
+    report fulfill-assigned-contract contract-id
+  ]
+
+  report false
+end
+
+to-report remove-from-blacklist [ request ]
+  let sender-action table:get request "action"
+
+  if sender-action = "TELL-REACHED"
+  [
+    let sender-id table:get request "sender"
+    let contract-id table:get request "contract-id"
+
+    ; Remove the sender current_stop from the blacklist
+    let sender-current-stop table:get request "content"
+    set blacklisted-stops remove sender-current-stop blacklisted-stops
+
     report fulfill-assigned-contract contract-id
   ]
 
@@ -126,10 +192,18 @@ to send-message-with-contract [ receiver action content callback ]
   send-message receiver message
 end
 
+to send-message-with-oneway-contract [ receiver action content ]
+  ;; Send a message to another bus and create a contract.
+  ;; The contract is not stored by the sending bus.
+  let contract-id generate-contract-id
+  let message create-message contract-id bus_id receiver receiver action content
+  send-message receiver message
+end
+
 to add-pending-contract [ contract-id callback ]
   ;; Add a new contract to the table of pending contracts
   table:put pending-contracts contract-id callback
-  show (word "Generated new pending contract " contract-id)
+  ;show (word "Generated new pending contract " contract-id)
 end
 
 to-report fulfill-pending-contract [ contract-id response ]
@@ -137,7 +211,7 @@ to-report fulfill-pending-contract [ contract-id response ]
   carefully [
     let callback table:get pending-contracts contract-id
     table:remove pending-contracts contract-id ; Remove contract; it has been fulfilled
-    show (word "Fulfilling pending contract " contract-id)
+    ;show (word "Fulfilling pending contract " contract-id)
     report (runresult callback response) ; Feed the response of another bus into the contract callback
   ]
   [
@@ -148,19 +222,20 @@ end
 to add-assigned-contract [ contract-id request ]
   ;; Add a new contract to the table of contracts assigned to this bus
   table:put assigned-contracts contract-id request
-  show (word "Received assigned contract " contract-id)
+  ;show (word "Received assigned contract " contract-id)
 end
 
 to-report fulfill-assigned-contract [ contract-id ]
   ;; Fulfill a contract that has been assigned to this bus by another bus
+  let fulfilled? false
   carefully [
     table:remove assigned-contracts contract-id ; Remove contract; it has been fulfilled
-    show (word "Fulfilling assigned contract " contract-id)
-    report true
+    ;show (word "Fulfilling assigned contract " contract-id)
+    set fulfilled? true
   ]
-  [
-    report false
-  ]
+  []
+
+  report fulfilled?
 end
 
 to-report create-message [ contract-id contract-from contract-to receiver action content ]
