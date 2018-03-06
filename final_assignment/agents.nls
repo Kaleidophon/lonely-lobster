@@ -72,25 +72,26 @@ to execute-actions
   ; Check if the bus is just initialized
   ifelse ticks-since-init = 1
   [
-      pick-destination
-      tell-going-to known-buses
+      pick-destination ; Pick the initial destination
+      tell-going-to known-buses ; Tell other buses your destination
       show (word "Destination: " target-stop)
-      set itinerary get-path-destination
+      set itinerary get-path-destination ; Update itinerary with the shortest path to buses destination
       show (word "New Itinerary: " itinerary)
+      pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
   ]
   [
     ifelse current_stop = target-stop
     ; Bus is at a station
     [
-      show (word "At destination")
-      drop-off-at-station
-      tell-reached
-      pick-destination
-      tell-going-to known-buses
+      show (word " Reached destination " current_stop)
+      drop-off-at-station ; Drop off remaining passengers in the bus since it should be the last stop in the itinerary
+      tell-reached ; Tell other buses that you have reached your destination and they can remove that stop from blacklist
+      pick-destination ; Pick new destination
+      tell-going-to known-buses ; Tell others your destination
       ; show (word "Destination: " target-stop)
-      pick-up-at-station
       set itinerary get-path-destination
       show (word "New Itinerary: " itinerary)
+      pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
     ]
     ; Bus is still on the road
     [
@@ -102,12 +103,12 @@ to execute-actions
       ]
       [
         ; show (word "Still on road at " current_stop)
-        drop-off-at-station
-        pick-up-at-station
-        let got-to-stop item 0 itinerary
-        set itinerary remove-item 0 itinerary
+        drop-off-at-station ; Drop off people with intermediate stops as their destination
+        pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
+        let got-to-stop item 0 itinerary ; Initialize next intermediate stop
+        set itinerary remove-item 0 itinerary ; Remove it from the itinerary
         ; show (word "Go-to-stop " got-to-stop)
-        travel-to got-to-stop
+        travel-to got-to-stop ; Initiate the travel
       ]
     ]
   ]
@@ -180,22 +181,10 @@ to pick-destination
 
     ifelse item 1 max-destination-tuple > item 1 max-waiting-stop-tuple
     [
-      ; ifelse current_stop != item 0 max-destination-tuple
-      ; [
         set target-stop item 0 max-destination-tuple
-      ; ]
-      ; [
-      ;   set target-stop item 0 max-waiting-stop-tuple
-      ; ]
     ]
     [
-      ; ifelse current_stop != item 0 max-waiting-stop-tuple
-      ; [
         set target-stop item 0 max-waiting-stop-tuple
-      ; ]
-      ; [
-      ;   set target-stop item 0 max-destination-tuple
-      ; ]
     ]
   ]
 
@@ -288,7 +277,6 @@ to-report get-max-waiting-stop
     set candidate-destination remove ? candidate-destination
   ]
 
-  ; while [ bus-stop != 23 ]
   foreach candidate-destination
   [
     let waiting-passengers length get-passengers-at-stop ?
@@ -350,45 +338,3 @@ to-report get-max-passenger-stop
   report max-passenger-stop-tuple
 
 end
-
-; to-report get-passenger-destinations
-;   ;; Return the destinations of all passengers as a list
-;   let destinations []
-;
-;   foreach bus_passengers
-;   [
-;     set destinations fput item 1 ? destinations
-;   ]
-;
-;   report destinations
-; end
-
-; to-report pick-most-requested-station
-;   ;; Pick next station based on the station most passenger being carried by the bus want to go to
-;   let passenger-destination get-passenger-destinations
-;
-;   ; Find frequency of requested stations
-;   let destination-freqs map [frequency ? passenger-destination] n-values 24 [? + 1]
-;
-;   ; Find most requested stop
-;   let max-value max destination-freqs
-;   let max-index position max-value destination-freqs
-;
-;   ; Don't change schedule is stop is only requested by a few people
-;   if max-value > 3 and max-index != current_stop
-;   [
-;     ;show (word "Checking shortest path from " current_stop " to most requested " max-index)
-;     let raw-return-path get-path-destination current_stop max-index
-;
-;     if length raw-return-path > 1
-;     [
-;       ;show (word "Shortest return path to most requested is " raw-return-path)
-;       set return-path raw-return-path
-;       let target item 0 return-path
-;       set return-path remove-item 0 return-path
-;
-;       report target
-;     ]
-;
-;     report max-index
-;   ]
