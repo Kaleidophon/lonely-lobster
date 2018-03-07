@@ -164,7 +164,6 @@ to-report remove-from-blacklist [ request ]
     ; Remove the sender current_stop from the blacklist
     let sender-current-stop table:get request "content"
     set blacklisted-stops remove sender-current-stop blacklisted-stops
-
     report fulfill-assigned-contract contract-id
   ]
 
@@ -234,7 +233,6 @@ to-report fulfill-assigned-contract [ contract-id ]
     set fulfilled? true
   ]
   []
-
   report fulfilled?
 end
 
