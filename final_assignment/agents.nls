@@ -21,6 +21,7 @@ buses-own [
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
   path-destination        ; Records the shortest path to the destination
+  blacklisted-stops       ; Records the stops it isn't supposed to use as destination
   capacity                ; Total capacity of bus
   pending-contracts       ; table of open / pending requests to other buses
   assigned-contracts      ; table of requests received by other buses
@@ -40,19 +41,17 @@ to init-buses
 
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
 
-  ; Initialize your agents here.
-  set target-stop 0
-  set itinerary generate-schedule
   set known-buses []
-  pick-destination
+  set blacklisted-stops []
+  set pending-contracts table:make
+  set assigned-contracts table:make
+  ; XXX: Add new reaction to requests as tasks here
+  set reactions (list (task remember-id) (task add-to-blacklist) (task remove-from-blacklist))
+  ; Infrom other buses in the city that you have been created
+  tell-buses-id
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
-  set pending-contracts table:make
-  set assigned-contracts table:make
-  set reactions (list (task remember-id) (task update-blacklist)) ; Add new reaction to requests as tasks here
-
-  tell-buses-id
 end
 
 to execute-actions
@@ -61,30 +60,56 @@ to execute-actions
 
   ; Check if a new bus should be used
   call-in-reinforcements
+  ; Update the ticks since the bus was initialized
   set ticks-since-init ticks-since-init + 1
 
   ; Message management
   process-inbox
   answer-questions
 
-  ; Check if itinerary is finished, if yes recreate it
-  if length itinerary = 0
+  ; Check if the bus is just initialized
+  ifelse ticks-since-init = 1
   [
-    set itinerary generate-schedule
+      pick-destination ; Pick the initial destination
+      tell-going-to known-buses ; Tell other buses your destination
+      show (word "Destination: " target-stop)
+      set itinerary get-path-destination ; Update itinerary with the shortest path to buses destination
+      show (word "New Itinerary: " itinerary)
+      pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
   ]
-
-  ifelse current_stop = target-stop
-  ; Bus is at a station
   [
-    drop-off-at-station
-    pick-up-at-station
-    pick-destination
+    ifelse current_stop = target-stop
+    ; Bus is at a station
+    [
+      show (word " Reached destination " current_stop)
+      drop-off-at-station ; Drop off remaining passengers in the bus since it should be the last stop in the itinerary
+      tell-reached ; Tell other buses that you have reached your destination and they can remove that stop from blacklist
+      pick-destination ; Pick new destination
+      tell-going-to known-buses ; Tell others your destination
+      ; show (word "Destination: " target-stop)
+      set itinerary get-path-destination
+      show (word "New Itinerary: " itinerary)
+      pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
+    ]
+    ; Bus is still on the road
+    [
+      ; show (word "Still on road at " current_stop)
+      ; show (word "Next-stop " next_stop)
+      ifelse current_stop = -1
+      [
+        travel-to next_stop
+      ]
+      [
+        ; show (word "Still on road at " current_stop)
+        drop-off-at-station ; Drop off people with intermediate stops as their destination
+        pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
+        let got-to-stop item 0 itinerary ; Initialize next intermediate stop
+        set itinerary remove-item 0 itinerary ; Remove it from the itinerary
+        ; show (word "Go-to-stop " got-to-stop)
+        travel-to got-to-stop ; Initiate the travel
+      ]
+    ]
   ]
-  ; Bus is still on the road
-  [
-    travel-to target-stop
-  ]
-
 end
 
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -103,12 +128,17 @@ to drop-off-at-station
 end
 
 to pick-up-at-station
-  ;; Pick up all the passenger at a bus stop.
-  foreach get-passengers-at-stop current_stop
+  ;; Pick up all the passengers whose destination is in the itinerary
+  foreach itinerary
   [
-    if not bus-full?
+    let stop-i ?
+
+    foreach get-passengers-at-stop current_stop
     [
-      pick-up-passenger item 0 ?
+      if not bus-full? and item 1 ? = stop-i
+      [
+        pick-up-passenger item 0 ?
+      ]
     ]
   ]
 end
@@ -130,27 +160,23 @@ end
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 to pick-destination
-  ;; Pick the next destination of the bus
-  set target-stop item 0 itinerary
-  set itinerary remove-item 0 itinerary
-end
 
-to-report generate-schedule
-  ;; Generate a boring planned out bus schedule that a vehicle follows relentlessly.
-  ;; (Assuming that Centraal is a hub where people want to go more often than to other stations)
-  let schedule [
-    3 9 8 6 8 2 8 9 3 ; Amsterdam Noord
-    9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
-    4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
-  ]
+  show (word "Blacklist " blacklisted-stops)
 
-  ;; Let buses drive the route into the other direction with a 50:50 probability
-  if random 2 = 0
+  let most-requested-tuple get-most-requested-stop
+  let max-waiting-stop-tuple []
+  let max-waiting-stop get-max-waiting-stop
+  set max-waiting-stop-tuple fput max-waiting-stop max-waiting-stop-tuple
+  set max-waiting-stop-tuple lput length get-passengers-at-stop max-waiting-stop max-waiting-stop-tuple
+
+  ; Choose the max of "most requested destination at the stop" and "stop with the most waiting people"
+  ifelse item 1 most-requested-tuple > item 1 max-waiting-stop-tuple
   [
-    set schedule reverse schedule
+      set target-stop item 0 most-requested-tuple
   ]
-
-  report schedule
+  [
+      set target-stop item 0 max-waiting-stop-tuple
+  ]
 end
 
 to call-in-reinforcements
@@ -220,4 +246,84 @@ to-report determine-new-bus-type
   [
     report 1
   ]
+end
+
+to-report get-max-waiting-stop
+  ;; Return out of all stops except the current stop and blacklisted stop, the stop with the max people waiting
+  let max-waiting-stop 3
+  let max-waiting-passengers -1
+  let bus-stop 0
+  let candidate-destination []
+
+  while [bus-stop != 23]
+  [
+    set candidate-destination fput bus-stop candidate-destination
+    set bus-stop bus-stop + 1
+  ]
+
+  foreach blacklisted-stops
+  [
+    set candidate-destination remove ? candidate-destination
+  ]
+
+  foreach candidate-destination
+  [
+    let waiting-passengers length get-passengers-at-stop ?
+    if max-waiting-passengers < waiting-passengers and ? != current_stop
+    [
+      set max-waiting-stop ?
+      set max-waiting-passengers waiting-passengers
+    ]
+  ]
+
+  report max-waiting-stop
+end
+
+to-report get-most-requested-stop
+  ;; Return the most requested destination stop at the current stop
+  let passenger-at-stop get-passengers-at-stop current_stop
+  let destination-counter table:make
+  let bus-stop-i 0
+  let max-passenger-stop 0
+  let max-passenger-stop-count -1
+
+  while [bus-stop-i <= 23]
+  [
+    table:put destination-counter bus-stop-i 0
+    set bus-stop-i bus-stop-i + 1
+  ]
+
+  foreach passenger-at-stop
+  [
+    let destination-passengers table:get destination-counter item 1 ?
+    table:put destination-counter item 1 ? destination-passengers + 1
+  ]
+
+  foreach blacklisted-stops
+  [
+    if table:has-key? destination-counter ?
+    [
+      table:remove destination-counter ?
+    ]
+  ]
+
+  if table:has-key? destination-counter current_stop
+  [
+    table:remove destination-counter current_stop
+  ]
+
+  foreach table:to-list destination-counter
+  [
+    if item 1 ? > max-passenger-stop-count
+    [
+      set max-passenger-stop-count item 1 ?
+      set max-passenger-stop item 0 ?
+    ]
+  ]
+
+  let max-passenger-stop-tuple []
+  set max-passenger-stop-tuple fput max-passenger-stop max-passenger-stop-tuple
+  set max-passenger-stop-tuple lput max-passenger-stop-count max-passenger-stop-tuple
+
+  report max-passenger-stop-tuple
 end

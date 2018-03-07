@@ -78,10 +78,33 @@ to tell-buses-id
   ]
 end
 
-to tell-destination
+to-report update [ response ]
+  ;; Verify that the handshake has been successful.
+  ;; TODO: This is just to test the messaging logic. Remove later.
+
+  let sender table:get response "sender"
+  let content table:get response "content"
+
+  show (word "Bus " sender " says: " content)
+  report true
+end
+
+to tell-going-to [other-buses]
   ;; Have a bus introduce itself after its creation
-  let action "TELL-DESTINATION"
+  let action "TELL-GOING-TO"
   let content target-stop
+
+  ; Send message to all other buses
+  foreach other-buses
+  [
+    send-message-with-oneway-contract ? action content
+  ]
+end
+
+to tell-reached
+  ;; Have a bus introduce itself after its creation
+  let action "TELL-REACHED"
+  let content current_stop
 
   ; Send message to all other buses
   foreach known-buses
@@ -97,29 +120,50 @@ to-report remember-id [ request ]
   [
     let sender-id table:get request "sender"
     let contract-id table:get request "contract-id"
-   
+
     ; Remember id
     let new-bus-id table:get request "content"
     set known-buses fput new-bus-id known-buses
-    
+
+    let sender-list []
+    set sender-list fput sender-id sender-list
+    tell-going-to sender-list
+
     report fulfill-assigned-contract contract-id
   ]
 
   report false
 end
 
-to-report update-blacklist [ request ]
+to-report add-to-blacklist [ request ]
   let sender-action table:get request "action"
 
-  if sender-action = "TELL-DESTINATION"
+  if sender-action = "TELL-GOING-TO"
   [
     let sender-id table:get request "sender"
     let contract-id table:get request "contract-id"
-   
-    ; Remember id
+
+    ; Add the sender destination to the blacklist
     let sender-destination table:get request "content"
-    ; TODO: Add logic
-    
+    set blacklisted-stops fput sender-destination blacklisted-stops
+
+    report fulfill-assigned-contract contract-id
+  ]
+
+  report false
+end
+
+to-report remove-from-blacklist [ request ]
+  let sender-action table:get request "action"
+
+  if sender-action = "TELL-REACHED"
+  [
+    let sender-id table:get request "sender"
+    let contract-id table:get request "contract-id"
+
+    ; Remove the sender current_stop from the blacklist
+    let sender-current-stop table:get request "content"
+    set blacklisted-stops remove sender-current-stop blacklisted-stops
     report fulfill-assigned-contract contract-id
   ]
 
@@ -189,7 +233,6 @@ to-report fulfill-assigned-contract [ contract-id ]
     set fulfilled? true
   ]
   []
-  
   report fulfilled?
 end
 
