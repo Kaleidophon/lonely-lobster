@@ -1,8 +1,4 @@
-;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-;;                                   DISTANCES
-;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-
-to-report get-path-destination [ from-stop to-stop ]
+to-report get-path-destination
   let bus-stop-i 0
   let distance-to-source table:make ; To store the distance of the shortest path to the source node
   let backtrack table:make ; To keep track of the previous node in the path
@@ -10,13 +6,13 @@ to-report get-path-destination [ from-stop to-stop ]
   ; Initialize distance-to-source with 0 for source node and for others initialize with infinity
   while [bus-stop-i <= 23]
   [
-    if bus-stop-i != from-stop
+    if bus-stop-i != current_stop
     [
       table:put distance-to-source bus-stop-i 999999
     ]
     set bus-stop-i bus-stop-i + 1
   ]
-  table:put distance-to-source from-stop 0
+  table:put distance-to-source current_stop 0
 
   ; Heap to keep track of the nodes to find shortest path to the source
   let heap table:keys distance-to-source
@@ -50,14 +46,14 @@ to-report get-path-destination [ from-stop to-stop ]
   ]
 
   ; Backtrack to the source using the bracktrack table
-  let backtrack-stop to-stop
+  let backtrack-stop target-stop
   ; Variable to store the shortest path
   let shortest-path []
 
   ; Start by adding the target stop
-  set shortest-path fput to-stop shortest-path
+  set shortest-path fput target-stop shortest-path
 
-  while [ backtrack-stop != from-stop ]
+  while [backtrack-stop != current_stop]
   [
     set backtrack-stop table:get backtrack backtrack-stop
     ; Keep adding the previous node to the shortest path while backtracking to the source
@@ -66,6 +62,8 @@ to-report get-path-destination [ from-stop to-stop ]
       set shortest-path fput backtrack-stop shortest-path
     ]
   ]
+
+  ; show (word "Shortest path" shortest-path)
 
   report shortest-path
 end
