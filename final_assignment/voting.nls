@@ -1,0 +1,53 @@
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                                    VOTING
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+
+to-report call-vote?
+  ;; Initiate a vote about a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
+  set ratio get-waiting-passengers / count buses
+
+  report ratio > 50 and ticks-since-vote > 30
+end
+
+to-report voting-finished?
+  ;; Check whether all the votes of the current voting have been cast
+  report length known-buses = length received-votes
+end
+
+to gather-votes
+  ;; Send two-way contracts to other buses asking for their votes
+  let action "ASK-VOTE"
+  let content 0
+  let callback (task add-vote)
+  
+  foreach known-buses 
+  [
+     send-message-with-contract ? action content callback
+  ]
+end
+
+to add-vote [ response ]
+  ;; Add a cast vote to the "ballot box"
+  let vote table:get response "content"
+  
+  set received-votes fput vote received-votes
+end
+
+to cast-vote [ request ]
+  ;; Cast vote on whether to demand a new bus
+  ; TODO
+  
+  let action table:get request "action"
+end
+
+to-report analyze-votes 
+  ;; Analyze the votes cast and make a decision about whether to order a new bus
+  ; TODO
+  report false
+end
+
+to order-bus
+  ;; Order a new bus
+  ; TODO
+end

@@ -1,4 +1,4 @@
-__includes [ "messaging.nls" "routing.nls" ]
+__includes [ "messaging.nls" "routing.nls" "voting.nls" ]
 
 buses-own [
   ; Static, read-only variables. These values never change. You can read them, but you cannot change them.
@@ -16,10 +16,12 @@ buses-own [
   ; You can create any new local variable you want. Just declare them here.
   itinerary               ; List of next stations to visit
   target-stop             ; Next stop the bus is driving towards
-  called-reinforcements?  ; Flag indicating whether this bus has already called a new bus
   initialized?            ; Flag indicating whether this bus has been initialized yet
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
+  ticks-since-vote        ; Ticks since last vote about new bus
+  vote-in-progess?        ; Duh
+  received-votes          ; Votes received from other buses
   path-destination        ; Records the shortest path to the destination
   blacklisted-stops       ; Records the stops it isn't supposed to use as destination
   capacity                ; Total capacity of bus
@@ -46,12 +48,14 @@ to init-buses
   set pending-contracts table:make
   set assigned-contracts table:make
   ; XXX: Add new reaction to requests as tasks here
-  set reactions (list (task remember-id) (task add-to-blacklist) (task remove-from-blacklist))
+  set reactions (list (task remember-id) (task add-to-blacklist) (task remove-from-blacklist) (task cast-vote))
   ; Infrom other buses in the city that you have been created
   tell-buses-id
-  set called-reinforcements? false
+  set ticks-since-vote 0
   set initialized? true
+  set vote-in-progess? false
   set ticks-since-init 0
+  set received-votes []
 end
 
 to execute-actions
@@ -59,7 +63,23 @@ to execute-actions
   ; You are allowed to use the global variable 'ticks'.
 
   ; Check if a new bus should be used
-  call-in-reinforcements
+  ; If a certain event is triggered, the "mediator" bus starts a vote among the buses
+  ifelse bus_id = 24 and call-vote?
+  [
+     gather-votes
+     set ticks-since-vote 0
+     set vote-in-progess? true
+  ]
+  [
+     set ticks-since-vote ticks-since-vote + 1
+  ]
+  
+  if vote-in-progess? and voting-finished?
+  [
+     let voting-result analyze-votes
+     ; TODO: Order bus based on result
+  ]
+  
   ; Update the ticks since the bus was initialized
   set ticks-since-init ticks-since-init + 1
 
@@ -176,23 +196,6 @@ to pick-destination
   ]
   [
       set target-stop item 0 max-waiting-stop-tuple
-  ]
-end
-
-to call-in-reinforcements
-  ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
-  set ratio get-waiting-passengers / count buses
-
-  if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
-  [
-    let new-bus-type determine-new-bus-type
-    add-bus new-bus-type
-    set called-reinforcements? true
-
-    ; Init a new bus
-    ask buses with [ current_stop = 3 and not initialized? ] [
-      init-buses
-    ]
   ]
 end
 
