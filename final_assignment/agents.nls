@@ -20,7 +20,7 @@ buses-own [
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
   ticks-since-vote        ; Ticks since last vote about new bus
-  vote-in-progess?        ; Duh
+  vote-in-progress?        ; Duh
   received-votes          ; Votes received from other buses
   path-destination        ; Records the shortest path to the destination
   blacklisted-stops       ; Records the stops it isn't supposed to use as destination
@@ -53,7 +53,7 @@ to init-buses
   tell-buses-id
   set ticks-since-vote 0
   set initialized? true
-  set vote-in-progess? false
+  set vote-in-progress? false
   set ticks-since-init 0
   set received-votes []
 end
@@ -64,20 +64,33 @@ to execute-actions
 
   ; Check if a new bus should be used
   ; If a certain event is triggered, the "mediator" bus starts a vote among the buses
-  ifelse bus_id = 24 and call-vote?
+  if bus_id = 24
   [
-     gather-votes
-     set ticks-since-vote 0
-     set vote-in-progess? true
-  ]
-  [
-     set ticks-since-vote ticks-since-vote + 1
-  ]
-  
-  if vote-in-progess? and voting-finished?
-  [
-     let voting-result analyze-votes
-     ; TODO: Order bus based on result
+     show (word "Call vote " call-vote? " | In Progress " vote-in-progress? " | Finished " voting-finished? " | Received " length received-votes " | Known " length known-buses)
+     if call-vote? and not vote-in-progress?
+     [
+       show "Initating a vote"
+       gather-votes
+       set vote-in-progress? true
+     ]
+     
+     ifelse vote-in-progress? and voting-finished?
+     [
+       show "Voting finished, analyze results"
+       let voting-result analyze-votes-preference
+       
+       show (word "Result of vote was " voting-result)
+       if voting-result > 0
+       [
+         order-bus voting-result
+       ]
+       set received-votes []
+       set vote-in-progress? false
+       set ticks-since-vote 0
+     ]
+     [
+       set ticks-since-vote ticks-since-vote + 1
+     ]
   ]
   
   ; Update the ticks since the bus was initialized
@@ -92,23 +105,23 @@ to execute-actions
   [
       pick-destination ; Pick the initial destination
       tell-going-to known-buses ; Tell other buses your destination
-      show (word "Destination: " target-stop)
+      ;show (word "Destination: " target-stop)
       set itinerary get-path-destination ; Update itinerary with the shortest path to buses destination
-      show (word "New Itinerary: " itinerary)
+      ;show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
   ]
   [
     ifelse current_stop = target-stop
     ; Bus is at a station
     [
-      show (word " Reached destination " current_stop)
+      ;show (word " Reached destination " current_stop)
       drop-off-at-station ; Drop off remaining passengers in the bus since it should be the last stop in the itinerary
       tell-reached ; Tell other buses that you have reached your destination and they can remove that stop from blacklist
       pick-destination ; Pick new destination
       tell-going-to known-buses ; Tell others your destination
       ; show (word "Destination: " target-stop)
       set itinerary get-path-destination
-      show (word "New Itinerary: " itinerary)
+      ;show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
     ]
     ; Bus is still on the road
@@ -181,7 +194,7 @@ end
 
 to pick-destination
 
-  show (word "Blacklist " blacklisted-stops)
+  ;show (word "Blacklist " blacklisted-stops)
 
   let most-requested-tuple get-most-requested-stop
   let max-waiting-stop-tuple []
