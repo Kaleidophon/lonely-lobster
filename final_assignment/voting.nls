@@ -32,7 +32,7 @@ to-report add-vote [ response ]
   let vote table:get response "content"
   let sender table:get response "sender"
   
-  show (word "Received vote " vote " from " sender)
+  ;show (word "Received vote " vote " from " sender)
   
   set received-votes fput vote received-votes
   report true
@@ -65,7 +65,7 @@ to-report cast-vote [ request ]
      ]
      
      let response vote
-     show (word "Voting for " vote)
+     ;show (word "Voting for " vote)
      let message create-message contract-id table:get request "contract-from" table:get request "contract-to" sender-id action response
      send-message sender-id message
      report fulfill-assigned-contract contract-id

@@ -20,8 +20,9 @@ buses-own [
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
   ticks-since-vote        ; Ticks since last vote about new bus
-  vote-in-progress?        ; Duh
+  vote-in-progress?       ; Duh
   received-votes          ; Votes received from other buses
+  voting-duration         ; Duration of the current vote in ticks
   path-destination        ; Records the shortest path to the destination
   blacklisted-stops       ; Records the stops it isn't supposed to use as destination
   capacity                ; Total capacity of bus
@@ -54,6 +55,7 @@ to init-buses
   set ticks-since-vote 0
   set initialized? true
   set vote-in-progress? false
+  set voting-duration 0
   set ticks-since-init 0
   set received-votes []
 end
@@ -66,8 +68,8 @@ to execute-actions
   ; If a certain event is triggered, the "mediator" bus starts a vote among the buses
   if bus_id = 24
   [
-     show (word "Call vote " call-vote? " | In Progress " vote-in-progress? " | Finished " voting-finished? " | Received " length received-votes " | Known " length known-buses)
-     show inbox
+     ;show (word "Call vote " call-vote? " | In Progress " vote-in-progress? " | Finished " voting-finished? " | Received " length received-votes " | Known " length known-buses)
+     ;show inbox
      if call-vote? and not vote-in-progress?
      [
        show "Initating a vote"
@@ -75,19 +77,26 @@ to execute-actions
        set vote-in-progress? true
      ]
      
-     ifelse vote-in-progress? and voting-finished?
+     ifelse vote-in-progress?
      [
-       show "Voting finished, analyze results"
-       let voting-result analyze-votes-preference
-       
-       show (word "Result of vote was " voting-result)
-       if voting-result > 0
+       ; Also stop vote if it takes too long (-> "disappearing votes bug")
+       ifelse voting-finished? or voting-duration > 5
        [
-         order-bus voting-result
+         show "Voting finished, analyze results"
+         let voting-result analyze-votes-preference
+         
+         show (word "Result of vote was " voting-result)
+         if voting-result > 0
+         [
+           order-bus voting-result
+         ]
+         set received-votes []
+         set vote-in-progress? false
+         set ticks-since-vote 0
        ]
-       set received-votes []
-       set vote-in-progress? false
-       set ticks-since-vote 0
+       [
+         set voting-duration voting-duration + 1
+       ]
      ]
      [
        set ticks-since-vote ticks-since-vote + 1
