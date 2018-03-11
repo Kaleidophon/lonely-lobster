@@ -67,6 +67,7 @@ to execute-actions
   if bus_id = 24
   [
      show (word "Call vote " call-vote? " | In Progress " vote-in-progress? " | Finished " voting-finished? " | Received " length received-votes " | Known " length known-buses)
+     show inbox
      if call-vote? and not vote-in-progress?
      [
        show "Initating a vote"

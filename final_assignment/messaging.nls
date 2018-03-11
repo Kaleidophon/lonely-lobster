@@ -170,21 +170,10 @@ to-report remove-from-blacklist [ request ]
   report false
 end
 
-to-report message-test-callback [ response ]
-  ;; Verify that the handshake has been successful.
-  ;; TODO: This is just to test the messaging logic. Remove later.
-
-  let sender table:get response "sender"
-  let content table:get response "content"
-
-  show (word "Bus " sender " says: " content)
-  report true
-end
-
 to send-message-with-contract [ receiver action content callback ]
   ;; Send a message to another bus and create a contract.
   ;; The contract is deemd fulfilled once the bus receives a response from the addressed bus.
-  let contract-id generate-contract-id
+  let contract-id generate-contract-id receiver
   let message create-message contract-id bus_id receiver receiver action content
 
   add-pending-contract contract-id callback
@@ -194,7 +183,7 @@ end
 to send-message-with-oneway-contract [ receiver action content ]
   ;; Send a message to another bus and create a contract.
   ;; The contract is not stored by the sending bus.
-  let contract-id generate-contract-id
+  let contract-id generate-contract-id receiver
   let message create-message contract-id bus_id receiver receiver action content
   send-message receiver message
 end
@@ -214,6 +203,7 @@ to-report fulfill-pending-contract [ contract-id response ]
     report (runresult callback response) ; Feed the response of another bus into the contract callback
   ]
   [
+    ;show error-message
     report false
   ]
 end
@@ -266,8 +256,8 @@ to-report compile-info
   report info
 end
 
-to-report generate-contract-id
+to-report generate-contract-id [ receiver-id ]
   ;; Generate a (hopefully) unique id for a contract
-  let contract-id (word bus_id ":" word ticks-since-init ":" random 100)
+  let contract-id (word bus_id ":" receiver-id ":" ticks-since-init)
   report contract-id
 end
