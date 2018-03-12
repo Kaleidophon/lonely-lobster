@@ -46,23 +46,7 @@ to-report cast-vote [ request ]
   [
      let sender-id table:get request "sender"
      let contract-id table:get request "contract-id"
-     let utilization get-utilization
-     let vote 0
-     
-     if utilization > 0.5
-     [
-        set vote 1
-     ]
-     
-     if utilization > 0.75
-     [
-        set vote 2
-     ]
-     
-     if utilization > 0.9
-     [
-        set vote 3
-     ]
+     let vote vote-with-crowdedness
      
      let response vote
      ;show (word "Voting for " vote)
@@ -72,6 +56,69 @@ to-report cast-vote [ request ]
   ]
   
   report false
+end
+
+to-report vote-with-utilization
+  ;; Cast your vote based on the current utilization of the vehicle
+  let utilization get-utilization
+  let vote 0
+  
+  if utilization > 0.6
+  [
+    set vote 1
+  ]
+  
+  if utilization > 0.8
+  [
+    set vote 2
+  ]
+  
+  if utilization > 0.95
+  [
+    set vote 3
+  ]
+  
+  report vote
+end
+
+to-report vote-with-crowdedness
+  ;; Cast your vote based on the crowdedness by station in your neighborhood
+  let reference-stop -1
+  ifelse current_stop = -1
+  [
+    set reference-stop target-stop
+  ]
+  [
+    set reference-stop current_stop
+  ]
+  
+  let passengers-waiting length get-passengers-at-stop reference-stop 
+  let neighboring-stations item reference-stop graph
+  
+  foreach neighboring-stations
+  [
+    set passengers-waiting passengers-waiting + length get-passengers-at-stop ?
+  ]
+  
+  let average-passengers-waiting passengers-waiting / (length neighboring-stations + 1)
+  let vote 0
+  
+  if average-passengers-waiting > 150
+  [
+    set vote 1
+  ]
+  
+  if average-passengers-waiting > 300
+  [
+    set vote 2
+  ]
+  
+  if average-passengers-waiting > 500
+  [
+    set vote 3
+  ]
+  
+  report vote
 end
 
 to-report analyze-votes-yes-no 
@@ -124,7 +171,7 @@ to-report analyze-votes-preference
      table:put votes ? (table:get votes ?) + 1
   ]
   
-  
+  ; Fall back to lower preferences if necessary
   if table:get votes 3 / total > 0.5
   [
      report 3
