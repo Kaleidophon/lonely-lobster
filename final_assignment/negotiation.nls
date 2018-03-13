@@ -3,7 +3,7 @@ to-report determine-unserved-passengers [thres]
   let unserved_passengers []
   let bus_stop 0
 
-  while [ bus-stop != 23 ]
+  while [ bus_stop != 23 ]
   [
     foreach get-passengers-at-stop bus_stop
     [
@@ -11,7 +11,7 @@ to-report determine-unserved-passengers [thres]
       let waiting_time item 4 (item p_id passengers)
       if waiting_time > thres
       [
-        set unserved_passengers lput [p_id waiting_time] unserved_passengers
+        set unserved_passengers lput (list p_id waiting_time) unserved_passengers
       ]
     ]
     set bus_stop bus_stop + 1
