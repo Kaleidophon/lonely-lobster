@@ -30,6 +30,7 @@ buses-own [
   assigned-contracts      ; table of requests received by other buses
   reactions               ; List of tasks of function that are used to react to an incoming request by another bus
   known-buses             ; List of other known buses
+  disappointments         ; Number of passengers that couldn't be picked up at the last few stops
 ]
 
 extensions [table]
@@ -58,6 +59,7 @@ to init-buses
   set voting-duration 0
   set ticks-since-init 0
   set received-votes []
+  set disappointments []
 end
 
 to execute-actions
@@ -172,18 +174,28 @@ end
 
 to pick-up-at-station
   ;; Pick up all the passengers whose destination is in the itinerary
+  let current-disappointments 0  ; Number of passengers that couldn't be picked up at the current station
+  
   foreach itinerary
   [
     let stop-i ?
 
     foreach get-passengers-at-stop current_stop
     [
-      if not bus-full? and item 1 ? = stop-i
+      if item 1 ? = stop-i
       [
-        pick-up-passenger item 0 ?
+        ifelse not bus-full?
+        [
+          pick-up-passenger item 0 ?
+        ]
+        [
+          set current-disappointments current-disappointments + 1
+        ]
       ]
     ]
   ]
+  
+  set disappointments lput current-disappointments disappointments
 end
 
 to-report get-passenger-destinations

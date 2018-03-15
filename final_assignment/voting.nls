@@ -46,7 +46,8 @@ to-report cast-vote [ request ]
   [
      let sender-id table:get request "sender"
      let contract-id table:get request "contract-id"
-     let vote vote-with-crowdedness
+     ;let vote vote-with-crowdedness
+     let vote vote-with-disappointment
      
      let response vote
      ;show (word "Voting for " vote)
@@ -114,6 +115,30 @@ to-report vote-with-crowdedness
   ]
   
   if average-passengers-waiting > 500
+  [
+    set vote 3
+  ]
+  
+  report vote
+end
+
+to-report vote-with-disappointment
+  ;; Cast your vote based on the average disappointment over the last t stops
+  let disappointment-rate get-disappointment-rate 15
+  show (word "Disappointment rate: " disappointment-rate)
+  let vote 0
+  
+  if disappointment-rate > 1
+  [
+    set vote 1
+  ]
+  
+  if disappointment-rate > 5
+  [
+    set vote 2
+  ]
+  
+  if disappointment-rate > 10
   [
     set vote 3
   ]
@@ -202,4 +227,24 @@ to-report get-utilization
   ]
   
   report get-capacity / length bus_passengers
+end
+
+to-report get-disappointment-rate [ t ]
+  ;; Get the average disappointent over the last t stops
+  let i length disappointments - 1
+  let norm-factor t
+ 
+  if length disappointments < t
+  [
+    set norm-factor length disappointments
+  ]
+  
+  let disappointment-sum 0
+  while [ i > length disappointments - t and i > 0]
+  [
+     set disappointment-sum disappointment-sum + item i disappointments
+     set i i - 1
+  ]
+  
+  report disappointment-sum / norm-factor
 end
