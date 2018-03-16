@@ -72,23 +72,23 @@ to execute-actions
   [
       pick-destination ; Pick the initial destination
       tell-going-to known-buses ; Tell other buses your destination
-      show (word "Destination: " target-stop)
+      ; show (word "Destination: " target-stop)
       set itinerary get-path-destination ; Update itinerary with the shortest path to buses destination
-      show (word "New Itinerary: " itinerary)
+      ; show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
   ]
   [
     ifelse current_stop = target-stop
     ; Bus is at a station
     [
-      show (word " Reached destination " current_stop)
+      ; show (word " Reached destination " current_stop)
       drop-off-at-station ; Drop off remaining passengers in the bus since it should be the last stop in the itinerary
       tell-reached ; Tell other buses that you have reached your destination and they can remove that stop from blacklist
       pick-destination ; Pick new destination
       tell-going-to known-buses ; Tell others your destination
       ; show (word "Destination: " target-stop)
       set itinerary get-path-destination
-      show (word "New Itinerary: " itinerary)
+      ; show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
     ]
     ; Bus is still on the road
@@ -129,6 +129,8 @@ end
 
 to pick-up-at-station
   ;; Pick up all the passengers whose destination is in the itinerary
+  set itinerary reverse itinerary
+
   foreach itinerary
   [
     let stop-i ?
@@ -141,6 +143,9 @@ to pick-up-at-station
       ]
     ]
   ]
+
+  set itinerary reverse itinerary
+  
 end
 
 to-report get-passenger-destinations
@@ -161,7 +166,7 @@ end
 
 to pick-destination
 
-  show (word "Blacklist " blacklisted-stops)
+  ; show (word "Blacklist " blacklisted-stops)
 
   let most-requested-tuple get-most-requested-stop
   let max-waiting-stop-tuple []
@@ -212,6 +217,10 @@ end
 
 to-report bus-full?
   ;; Check whether the buses' capacity has been reached yet.
+  ; if length bus_passengers = get-capacity
+  ; [
+  ;   show (word "FULLLL !!!!")
+  ; ]
   report length bus_passengers = get-capacity
 end
 

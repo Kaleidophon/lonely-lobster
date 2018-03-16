@@ -85,7 +85,7 @@ to-report update [ response ]
   let sender table:get response "sender"
   let content table:get response "content"
 
-  show (word "Bus " sender " says: " content)
+  ; show (word "Bus " sender " says: " content)
   report true
 end
 
@@ -177,7 +177,7 @@ to-report message-test-callback [ response ]
   let sender table:get response "sender"
   let content table:get response "content"
 
-  show (word "Bus " sender " says: " content)
+  ; show (word "Bus " sender " says: " content)
   report true
 end
 
