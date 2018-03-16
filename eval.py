@@ -87,6 +87,10 @@ def create_argparser():
         "--img", default="./eval_out/",
         help="Define the directory where graphs and images are being saved to."
     )
+    parser.add_argument(
+        "--nographs", action='store_true',
+        help="Suppress graph creation"
+    )
 
     return parser
 
@@ -97,4 +101,6 @@ if __name__ == "__main__":
 
     times, data = read_eval_data_file(args.file)
     compute_metrics(data, args.out, args.identifier)
-    create_plots(times, data, args.img, args.identifier)
+
+    if not args.nographs:
+        create_plots(times, data, args.img, args.identifier)
