@@ -1,4 +1,4 @@
-__includes [ "messaging.nls" "routing.nls" ]
+__includes [ "messaging.nls" "routing.nls" "voting.nls" ]
 
 buses-own [
   ; Static, read-only variables. These values never change. You can read them, but you cannot change them.
@@ -16,10 +16,13 @@ buses-own [
   ; You can create any new local variable you want. Just declare them here.
   itinerary               ; List of next stations to visit
   target-stop             ; Next stop the bus is driving towards
-  called-reinforcements?  ; Flag indicating whether this bus has already called a new bus
   initialized?            ; Flag indicating whether this bus has been initialized yet
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
+  ticks-since-vote        ; Ticks since last vote about new bus
+  vote-in-progress?       ; Duh
+  received-votes          ; Votes received from other buses
+  voting-duration         ; Duration of the current vote in ticks
   path-destination        ; Records the shortest path to the destination
   blacklisted-stops       ; Records the stops it isn't supposed to use as destination
   capacity                ; Total capacity of bus
@@ -27,6 +30,7 @@ buses-own [
   assigned-contracts      ; table of requests received by other buses
   reactions               ; List of tasks of function that are used to react to an incoming request by another bus
   known-buses             ; List of other known buses
+  disappointments         ; Number of passengers that couldn't be picked up at the last few stops
 ]
 
 extensions [table]
@@ -46,12 +50,16 @@ to init-buses
   set pending-contracts table:make
   set assigned-contracts table:make
   ; XXX: Add new reaction to requests as tasks here
-  set reactions (list (task remember-id) (task add-to-blacklist) (task remove-from-blacklist))
+  set reactions (list (task remember-id) (task add-to-blacklist) (task remove-from-blacklist) (task cast-vote))
   ; Infrom other buses in the city that you have been created
   tell-buses-id
-  set called-reinforcements? false
+  set ticks-since-vote 0
   set initialized? true
+  set vote-in-progress? false
+  set voting-duration 0
   set ticks-since-init 0
+  set received-votes []
+  set disappointments []
 end
 
 to execute-actions
@@ -59,7 +67,45 @@ to execute-actions
   ; You are allowed to use the global variable 'ticks'.
 
   ; Check if a new bus should be used
-  call-in-reinforcements
+  ; If a certain event is triggered, the "mediator" bus starts a vote among the buses
+  if bus_id = 24
+  [
+     ;show (word "Call vote " call-vote? " | In Progress " vote-in-progress? " | Finished " voting-finished? " | Received " length received-votes " | Known " length known-buses)
+     ;show inbox
+     if call-vote? and not vote-in-progress?
+     [
+       show "Initating a vote"
+       gather-votes
+       set vote-in-progress? true
+     ]
+     
+     ifelse vote-in-progress?
+     [
+       ; Also stop vote if it takes too long (-> "disappearing votes bug")
+       ifelse voting-finished? or voting-duration > 5
+       [
+         show "Voting finished, analyze results"
+         let voting-result analyze-votes-preference
+         
+         show (word "Result of vote was " voting-result)
+         if voting-result > 0
+         [
+           order-bus voting-result
+         ]
+         set received-votes []
+         set received-votes lput vote-with-disappointment received-votes ; Let the mediator bus vote too
+         set vote-in-progress? false
+         set ticks-since-vote 0
+       ]
+       [
+         set voting-duration voting-duration + 1
+       ]
+     ]
+     [
+       set ticks-since-vote ticks-since-vote + 1
+     ]
+  ]
+  
   ; Update the ticks since the bus was initialized
   set ticks-since-init ticks-since-init + 1
 
@@ -72,23 +118,23 @@ to execute-actions
   [
       pick-destination ; Pick the initial destination
       tell-going-to known-buses ; Tell other buses your destination
-      show (word "Destination: " target-stop)
+      ;show (word "Destination: " target-stop)
       set itinerary get-path-destination ; Update itinerary with the shortest path to buses destination
-      show (word "New Itinerary: " itinerary)
+      ;show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
   ]
   [
     ifelse current_stop = target-stop
     ; Bus is at a station
     [
-      show (word " Reached destination " current_stop)
+      ;show (word " Reached destination " current_stop)
       drop-off-at-station ; Drop off remaining passengers in the bus since it should be the last stop in the itinerary
       tell-reached ; Tell other buses that you have reached your destination and they can remove that stop from blacklist
       pick-destination ; Pick new destination
       tell-going-to known-buses ; Tell others your destination
       ; show (word "Destination: " target-stop)
       set itinerary get-path-destination
-      show (word "New Itinerary: " itinerary)
+      ;show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
     ]
     ; Bus is still on the road
@@ -129,18 +175,28 @@ end
 
 to pick-up-at-station
   ;; Pick up all the passengers whose destination is in the itinerary
+  let current-disappointments 0  ; Number of passengers that couldn't be picked up at the current station
+  
   foreach itinerary
   [
     let stop-i ?
 
     foreach get-passengers-at-stop current_stop
     [
-      if not bus-full? and item 1 ? = stop-i
+      if item 1 ? = stop-i
       [
-        pick-up-passenger item 0 ?
+        ifelse not bus-full?
+        [
+          pick-up-passenger item 0 ?
+        ]
+        [
+          set current-disappointments current-disappointments + 1
+        ]
       ]
     ]
   ]
+  
+  set disappointments lput current-disappointments disappointments
 end
 
 to-report get-passenger-destinations
@@ -161,7 +217,7 @@ end
 
 to pick-destination
 
-  show (word "Blacklist " blacklisted-stops)
+  ;show (word "Blacklist " blacklisted-stops)
 
   let most-requested-tuple get-most-requested-stop
   let max-waiting-stop-tuple []
@@ -176,23 +232,6 @@ to pick-destination
   ]
   [
       set target-stop item 0 max-waiting-stop-tuple
-  ]
-end
-
-to call-in-reinforcements
-  ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
-  set ratio get-waiting-passengers / count buses
-
-  if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
-  [
-    let new-bus-type determine-new-bus-type
-    add-bus new-bus-type
-    set called-reinforcements? true
-
-    ; Init a new bus
-    ask buses with [ current_stop = 3 and not initialized? ] [
-      init-buses
-    ]
   ]
 end
 

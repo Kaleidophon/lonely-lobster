@@ -1,0 +1,262 @@
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                                    VOTING
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+
+to-report call-vote?
+  ;; Initiate a vote about a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
+  set ratio get-waiting-passengers / count buses
+
+  ;report ratio > 50 and ticks-since-vote > 45
+  report ticks-since-vote > 30
+end
+
+to-report voting-finished?
+  ;; Check whether all the votes of the current voting have been cast
+  report length known-buses = length received-votes
+end
+
+to gather-votes
+  ;; Send two-way contracts to other buses asking for their votes
+  let action "ASK-VOTE"
+  let content 0
+  
+  foreach known-buses 
+  [
+     send-message-with-contract ? action content (task add-vote)
+  ]
+end
+
+to-report add-vote [ response ]
+  ;; Add a cast vote to the "ballot box"
+  let vote table:get response "content"
+  let sender table:get response "sender"
+  
+  ;show (word "Received vote " vote " from " sender)
+  
+  set received-votes fput vote received-votes
+  report true
+end
+
+to-report cast-vote [ request ]
+  ;; Cast vote on whether to demand a new bus based on current utilization
+  let action table:get request "action"
+  
+  if action = "ASK-VOTE"
+  [
+     let sender-id table:get request "sender"
+     let contract-id table:get request "contract-id"
+     ;let vote vote-with-crowdedness
+     let vote vote-with-disappointment
+     ;let dr get-disappointment-rate 15
+     
+     let response vote
+     ;show (word "Voting for " vote)
+     let message create-message contract-id table:get request "contract-from" table:get request "contract-to" sender-id action response
+     send-message sender-id message
+     report fulfill-assigned-contract contract-id
+  ]
+  
+  report false
+end
+
+to-report vote-with-utilization
+  ;; Cast your vote based on the current utilization of the vehicle
+  let utilization get-utilization
+  let vote 0
+  
+  if utilization > 0.6
+  [
+    set vote 1
+  ]
+  
+  if utilization > 0.8
+  [
+    set vote 2
+  ]
+  
+  if utilization > 0.95
+  [
+    set vote 3
+  ]
+  
+  report vote
+end
+
+to-report vote-with-crowdedness
+  ;; Cast your vote based on the crowdedness by station in your neighborhood
+  let reference-stop -1
+  ifelse current_stop = -1
+  [
+    set reference-stop target-stop
+  ]
+  [
+    set reference-stop current_stop
+  ]
+  
+  let passengers-waiting length get-passengers-at-stop reference-stop 
+  let neighboring-stations item reference-stop graph
+  
+  foreach neighboring-stations
+  [
+    set passengers-waiting passengers-waiting + length get-passengers-at-stop ?
+  ]
+  
+  let average-passengers-waiting passengers-waiting / (length neighboring-stations + 1)
+  let vote 0
+  
+  if average-passengers-waiting > 150
+  [
+    set vote 1
+  ]
+  
+  if average-passengers-waiting > 300
+  [
+    set vote 2
+  ]
+  
+  if average-passengers-waiting > 500
+  [
+    set vote 3
+  ]
+  
+  report vote
+end
+
+to-report vote-with-disappointment
+  ;; Cast your vote based on the average disappointment over the last t stops
+  let t 10
+  let disappointment-rate get-disappointment-rate t
+  let mu 0.00219177 * t * t - 0.155699 * t + 4.66269
+  let sigma 0.0110448 * t * t - 0.829527 * t + 25.2988
+  let thresh1 2
+  let thresh2 5
+  let thresh3 10
+  ;let thresh1 mu
+  ;let thresh2 mu + sigma
+  ;let thresh3 mu + 2 * sigma
+  ;show (word "Tresholds: " thresh1 " | " thresh2 " | " thresh3)
+  
+  show (word "Disappointment rate: " disappointment-rate)
+  let vote 0
+  
+  if disappointment-rate > thresh1
+  [
+    set vote 1
+  ]
+  
+  if disappointment-rate > thresh2
+  [
+    set vote 2
+  ]
+  
+  if disappointment-rate > thresh3
+  [
+    set vote 3
+  ]
+  
+  report vote
+end
+
+to-report analyze-votes-yes-no 
+  ;; Analyze the votes cast and make a decision about whether to order a new bus
+  let yes 0
+  let total 0
+  
+  ; In case only the mediator bus is present
+  if length received-votes = 0
+  [
+     report true
+  ]
+  
+  foreach received-votes
+  [ 
+     if ? > 0
+     [
+        set yes yes + 1
+     ]
+     set total total + 1
+  ]
+  
+  if yes / total > 0.5
+  [
+    report true
+  ]
+  
+  report false
+end
+
+to-report analyze-votes-preference
+  ;; Analyze the votes and make a decision based on konsensus 
+  let votes table:make
+  let total length received-votes
+  table:put votes 0 0
+  table:put votes 1 0
+  table:put votes 2 0
+  table:put votes 3 0
+  
+  show (word "Votes: " received-votes)
+  
+  if length received-votes = 0
+  [
+     report 1
+  ]
+  
+  ; Count votes
+  foreach received-votes
+  [
+     table:put votes ? (table:get votes ?) + 1
+  ]
+  
+  ; Fall back to lower preferences if necessary
+  if table:get votes 3 / total > 0.5
+  [
+     report 3
+  ]
+  
+  if (table:get votes 3 + table:get votes 2) / total > 0.5
+  [
+     report 2
+  ]
+  
+  if (table:get votes 3 + table:get votes 2 + table:get votes 1) / total > 0.5
+  [
+     report 1
+  ]
+  
+  report 0
+end
+
+to order-bus [ bus-type ]
+  ;; Order a new bus
+  add-bus bus-type
+end
+
+to-report get-utilization
+  if length bus_passengers = 0
+  [
+     report 0
+  ]
+  
+  report get-capacity / length bus_passengers
+end
+
+to-report get-disappointment-rate [ t ]
+  ;; Get the average disappointent over the last t stops
+  let i length disappointments - 1
+  let norm-factor t
+ 
+  if length disappointments < t
+  [
+    set norm-factor length disappointments
+  ]
+  
+  let disappointment-sum 0
+  while [ i > length disappointments - t and i > 0]
+  [
+     set disappointment-sum disappointment-sum + item i disappointments
+     set i i - 1
+  ]
+  
+  report disappointment-sum / norm-factor
+end
