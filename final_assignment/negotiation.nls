@@ -5,18 +5,110 @@ to-report determine-unserved-passengers [thres]
 
   while [ bus_stop != 23 ]
   [
-    foreach get-passengers-at-stop bus_stop
+    foreach get-passengers-at-stop bus-stop
     [
       let p_id item 0 ?
-      let waiting_time item 4 (item p_id passengers)
-      if waiting_time > thres
+      let waiting-time item 4 (item p_id passengers)
+      if waiting-time > thres
       [
-        set unserved_passengers lput (list p_id waiting_time) unserved_passengers
+        set unserved-passengers lput (list p-id waiting_time) unserved-passengers
       ]
     ]
     set bus_stop bus_stop + 1
   ]
 
-  report unserved_passengers
+  report unserved-passengers
 
+end
+
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                                    negotiatING
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+
+to-report call-negotiation?
+  ;; Initiate a negotiate about a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
+  set unserved_passengers determine-unserved-passengers
+
+  ;report ratio > 50 and ticks-since-negotiate > 45
+  report length unserved_passengers > 20 and ticks-since-negotiate > 45
+end
+
+to-report negotiating-finished?
+  ;; Check whether all the negotiates of the current negotiating have been cast
+  report length known-buses = length received-negotiates
+end
+
+to gather-negotiates
+  ;; Send two-way contracts to other buses asking for their negotiates
+  let action "ASK-NEGOTIATE"
+  let content 0
+
+  foreach known-buses
+  [
+     send-message-with-contract ? action content (task add-negotiate)
+  ]
+end
+
+to-report add-negotiate [ response ]
+  ;; Add a cast negotiate to the "ballot box"
+  let negotiate table:get response "content"
+  let sender table:get response "sender"
+
+  ;show (word "Received negotiate " negotiate " from " sender)
+
+  set received-negotiates fput negotiate received-negotiates
+  report true
+end
+
+to-report cast-negotiate [ request ]
+  ;; Cast negotiate on whether to demand a new bus based on current utilization
+  let action table:get request "action"
+
+  if action = "ASK-NEGOTIATE"
+  [
+     let sender-id table:get request "sender"
+     let contract-id table:get request "contract-id"
+     ;let negotiate negotiate-with-crowdedness
+     let negotiate negotiate-with-disappointment
+
+     let response negotiate
+     ;show (word "negotiating for " negotiate)
+     let message create-message contract-id table:get request "contract-from" table:get request "contract-to" sender-id action response
+     send-message sender-id message
+     report fulfill-assigned-contract contract-id
+  ]
+
+  report false
+end
+
+to-report negotiate-with-utilization
+  ;; Cast your negotiate based on the current utilization of the vehicle
+  let utilization get-utilization
+  report utilization
+end
+
+to-report negotiate-with-crowdedness
+  ;; Cast your negotiate based on the crowdedness by station in your neighborhood
+  let reference-stop -1
+  ifelse current_stop = -1
+  [
+    set reference-stop target-stop
+  ]
+  [
+    set reference-stop current_stop
+  ]
+
+  let passengers-waiting length get-passengers-at-stop reference-stop
+  let neighboring-stations item reference-stop graph
+
+  foreach neighboring-stations
+  [
+    set passengers-waiting passengers-waiting + length get-passengers-at-stop ?
+  ]
+
+  let average-passengers-waiting passengers-waiting / (length neighboring-stations + 1)
+
+
+  report average-passengers-waiting
 end
