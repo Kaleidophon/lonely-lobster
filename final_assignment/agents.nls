@@ -93,6 +93,7 @@ to execute-actions
            order-bus voting-result
          ]
          set received-votes []
+         set received-votes lput vote-with-disappointment received-votes ; Let the mediator bus vote too
          set vote-in-progress? false
          set ticks-since-vote 0
        ]

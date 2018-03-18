@@ -8,7 +8,7 @@ to-report call-vote?
   set ratio get-waiting-passengers / count buses
 
   ;report ratio > 50 and ticks-since-vote > 45
-  report ticks-since-vote > 45
+  report ticks-since-vote > 30
 end
 
 to-report voting-finished?
@@ -46,9 +46,9 @@ to-report cast-vote [ request ]
   [
      let sender-id table:get request "sender"
      let contract-id table:get request "contract-id"
-     let vote vote-with-crowdedness
-     ;let vote vote-with-disappointment
-     let dr get-disappointment-rate 35
+     ;let vote vote-with-crowdedness
+     let vote vote-with-disappointment
+     ;let dr get-disappointment-rate 15
      
      let response vote
      ;show (word "Voting for " vote)
@@ -125,21 +125,32 @@ end
 
 to-report vote-with-disappointment
   ;; Cast your vote based on the average disappointment over the last t stops
-  let disappointment-rate get-disappointment-rate 45
+  let t 10
+  let disappointment-rate get-disappointment-rate t
+  let mu 0.00219177 * t * t - 0.155699 * t + 4.66269
+  let sigma 0.0110448 * t * t - 0.829527 * t + 25.2988
+  let thresh1 2
+  let thresh2 5
+  let thresh3 10
+  ;let thresh1 mu
+  ;let thresh2 mu + sigma
+  ;let thresh3 mu + 2 * sigma
+  ;show (word "Tresholds: " thresh1 " | " thresh2 " | " thresh3)
+  
   show (word "Disappointment rate: " disappointment-rate)
   let vote 0
   
-  if disappointment-rate > 1
+  if disappointment-rate > thresh1
   [
     set vote 1
   ]
   
-  if disappointment-rate > 5
+  if disappointment-rate > thresh2
   [
     set vote 2
   ]
   
-  if disappointment-rate > 10
+  if disappointment-rate > thresh3
   [
     set vote 3
   ]
@@ -246,10 +257,6 @@ to-report get-disappointment-rate [ t ]
      set disappointment-sum disappointment-sum + item i disappointments
      set i i - 1
   ]
-  
-  file-open "disappointments35.txt"
-  file-write disappointment-sum / norm-factor file-print ""
-  file-close
   
   report disappointment-sum / norm-factor
 end
