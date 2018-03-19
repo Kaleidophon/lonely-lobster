@@ -175,7 +175,6 @@ end
 
 to pick-up-at-station
   ;; Pick up all the passengers whose destination is in the itinerary
-  let current-disappointments 0  ; Number of passengers that couldn't be picked up at the current station
   
   foreach itinerary
   [
@@ -183,20 +182,15 @@ to pick-up-at-station
 
     foreach get-passengers-at-stop current_stop
     [
-      if item 1 ? = stop-i
+      if item 1 ? = stop-i and not bus-full?
       [
-        ifelse not bus-full?
-        [
-          pick-up-passenger item 0 ?
-        ]
-        [
-          set current-disappointments current-disappointments + 1
-        ]
+         pick-up-passenger item 0 ?
       ]
     ]
   ]
   
-  set disappointments lput current-disappointments disappointments
+  ; All passengers that didn't get picked up are "disappointed"
+  set disappointments lput length get-passengers-at-stop current_stop disappointments
 end
 
 to-report get-passenger-destinations
@@ -224,6 +218,9 @@ to pick-destination
   let max-waiting-stop get-max-waiting-stop
   set max-waiting-stop-tuple fput max-waiting-stop max-waiting-stop-tuple
   set max-waiting-stop-tuple lput length get-passengers-at-stop max-waiting-stop max-waiting-stop-tuple
+  
+  show most-requested-tuple
+  show max-waiting-stop-tuple
 
   ; Choose the max of "most requested destination at the stop" and "stop with the most waiting people"
   ifelse item 1 most-requested-tuple > item 1 max-waiting-stop-tuple
@@ -232,6 +229,12 @@ to pick-destination
   ]
   [
       set target-stop item 0 max-waiting-stop-tuple
+  ]
+  
+  ; Make sure buses don't get stuck
+  if target-stop = current_stop
+  [
+      set target-stop random 24
   ]
 end
 
