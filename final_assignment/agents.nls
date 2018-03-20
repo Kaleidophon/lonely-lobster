@@ -27,6 +27,16 @@ buses-own [
   assigned-contracts      ; table of requests received by other buses
   reactions               ; List of tasks of function that are used to react to an incoming request by another bus
   known-buses             ; List of other known buses
+
+  still-waiting           ; List of number of passengers still waiting at the stop after pickup indexed by timesteps
+  disappointments         ; List of number of passengers who have destination path stops as final destination
+                          ; who couldn't be picked up because of the bus being full indexed by timesteps
+  bus-fullness            ; List containing the number of passengers in the bus indexed by timesteps
+
+  ; disappointments         ; Number of instances where passengers couldn't be picked up due to bus being full
+  ; num-pickups-full        ; Number of times the bus has called pick destination
+  ; special-bus?            ; Flag indicating whether this bus is a special bus or not
+  ; vote-in-progress?       ; Flag indicating whether the voting is in progress
 ]
 
 extensions [table]
@@ -52,6 +62,10 @@ to init-buses
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
+
+  set disappointments []
+  set bus-fullness []
+  set still-waiting []
 end
 
 to execute-actions
@@ -70,43 +84,43 @@ to execute-actions
   ; Check if the bus is just initialized
   ifelse ticks-since-init = 1
   [
-      pick-destination ; Pick the initial destination
-      tell-going-to known-buses ; Tell other buses your destination
-      ; show (word "Destination: " target-stop)
-      set itinerary get-path-destination ; Update itinerary with the shortest path to buses destination
-      ; show (word "New Itinerary: " itinerary)
-      pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
+      pick-destination
+      tell-going-to known-buses
+      show (word "Destination: " target-stop)
+      set itinerary get-path-destination
+      show (word "New Itinerary: " itinerary)
+      pick-up-at-station
   ]
   [
     ifelse current_stop = target-stop
     ; Bus is at a station
     [
-      ; show (word " Reached destination " current_stop)
-      drop-off-at-station ; Drop off remaining passengers in the bus since it should be the last stop in the itinerary
-      tell-reached ; Tell other buses that you have reached your destination and they can remove that stop from blacklist
-      pick-destination ; Pick new destination
-      tell-going-to known-buses ; Tell others your destination
-      ; show (word "Destination: " target-stop)
+      show (word " Reached destination " current_stop)
+      drop-off-at-station
+      tell-reached
+      pick-destination
+      tell-going-to known-buses
+      show (word "Destination: " target-stop)
       set itinerary get-path-destination
-      ; show (word "New Itinerary: " itinerary)
-      pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
+      show (word "New Itinerary: " itinerary)
+      pick-up-at-station
     ]
     ; Bus is still on the road
     [
-      ; show (word "Still on road at " current_stop)
-      ; show (word "Next-stop " next_stop)
+      show (word "Still on road at " current_stop)
+      show (word "Next-stop " next_stop)
       ifelse current_stop = -1
       [
         travel-to next_stop
       ]
       [
-        ; show (word "Still on road at " current_stop)
-        drop-off-at-station ; Drop off people with intermediate stops as their destination
-        pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
-        let got-to-stop item 0 itinerary ; Initialize next intermediate stop
-        set itinerary remove-item 0 itinerary ; Remove it from the itinerary
-        ; show (word "Go-to-stop " got-to-stop)
-        travel-to got-to-stop ; Initiate the travel
+        show (word "Still on road at " current_stop)
+        drop-off-at-station
+        pick-up-at-station
+        let got-to-stop item 0 itinerary
+        set itinerary remove-item 0 itinerary
+        show (word "Go-to-stop " got-to-stop)
+        travel-to got-to-stop
       ]
     ]
   ]
@@ -129,6 +143,9 @@ end
 
 to pick-up-at-station
   ;; Pick up all the passengers whose destination is in the itinerary
+
+  let current-disappointments 0  ; Number of passengers that couldn't be picked up at the current station
+
   set itinerary reverse itinerary
 
   foreach itinerary
@@ -137,15 +154,43 @@ to pick-up-at-station
 
     foreach get-passengers-at-stop current_stop
     [
-      if not bus-full? and item 1 ? = stop-i
+      if item 1 ? = stop-i
       [
-        pick-up-passenger item 0 ?
+        ifelse not bus-full?
+        [
+          pick-up-passenger item 0 ?
+        ]
+        [
+          set current-disappointments current-disappointments + 1
+        ]
       ]
     ]
   ]
 
   set itinerary reverse itinerary
-  
+
+  set disappointments lput current-disappointments disappointments
+  set bus-fullness lput length bus_passengers bus-fullness
+  set still-waiting lput length get-passengers-at-stop current_stop still-waiting
+
+  show (word "Disappointmented passangers: " last disappointments)
+  show (word "Capacity of the bus: " get-capacity)
+  show (word "Number of Passangers in the bus: " last bus-fullness)
+  show (word "Number of waiting passangers: " last still-waiting)
+  show (word "Waiting passangers: " get-passengers-at-stop current_stop)
+
+  ; ifelse bus-full?
+  ; [
+  ;   let other-passengers length get-passengers-at-stop current_stop
+  ;   set other-passengers other-passengers - current-disappointments
+  ;   show (word "Unsatisfied destination passengers: " current-disappointments)
+  ;   show (word "Other passengers: " other-passengers)
+  ; ]
+  ; [
+  ;   let other-passengers length get-passengers-at-stop current_stop
+  ;   show (word "Waiting passengers: " other-passengers)
+  ; ]
+
 end
 
 to-report get-passenger-destinations
@@ -184,23 +229,6 @@ to pick-destination
   ]
 end
 
-to call-in-reinforcements
-  ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
-  set ratio get-waiting-passengers / count buses
-
-  if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
-  [
-    let new-bus-type determine-new-bus-type
-    add-bus new-bus-type
-    set called-reinforcements? true
-
-    ; Init a new bus
-    ask buses with [ current_stop = 3 and not initialized? ] [
-      init-buses
-    ]
-  ]
-end
-
 to-report get-waiting-passengers
   ;; Count the total number of passengers waiting at all stations
   let waiting-passengers 0
@@ -217,10 +245,6 @@ end
 
 to-report bus-full?
   ;; Check whether the buses' capacity has been reached yet.
-  ; if length bus_passengers = get-capacity
-  ; [
-  ;   show (word "FULLLL !!!!")
-  ; ]
   report length bus_passengers = get-capacity
 end
 
@@ -254,6 +278,23 @@ to-report determine-new-bus-type
   ]
   [
     report 1
+  ]
+end
+
+to call-in-reinforcements
+  ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
+  set ratio get-waiting-passengers / count buses
+
+  if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
+  [
+    let new-bus-type determine-new-bus-type
+    add-bus new-bus-type
+    set called-reinforcements? true
+
+    ; Init a new bus
+    ask buses with [ current_stop = 3 and not initialized? ] [
+      init-buses
+    ]
   ]
 end
 
