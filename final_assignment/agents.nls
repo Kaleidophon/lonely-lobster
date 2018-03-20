@@ -67,13 +67,19 @@ end
 to execute-actions
   ; Add decision making strategies for your agents here.
   ; You are allowed to use the global variable 'ticks'.
+  ; Update the ticks since the bus was initialized
+  set ticks-since-init ticks-since-init + 1
+
+  ; Message management
+  process-inbox
+  answer-questions
 
   ; Check if a new bus should be used
   ; If a certain event is triggered, the  bus starts a vote among the buses
   ;show (word "Call vote " call-vote? " | In Progress " vote-in-progress? " | Finished " voting-finished? " | Received " length received-votes " | Known " length known-buses)
   ;show (word "Received " received-votes)
   ;show inbox
-  if call-vote? and not vote-in-progress?
+  if call-vote and not vote-in-progress?
   [
     show "Initating a vote"
     set received-votes lput vote-with-disappointment received-votes ; Let the mediator bus vote too
@@ -85,7 +91,7 @@ to execute-actions
   ifelse vote-in-progress?
   [
     ; Also stop vote if it takes too long (-> "disappearing votes bug")
-    ifelse voting-duration > 5 or voting-finished?
+    ifelse voting-duration > 5 or voting-finished
     [
       if vote-initiator?
       [
@@ -98,12 +104,11 @@ to execute-actions
           order-bus voting-result
         ]
         set received-votes []
+        set vote-initiator? false
       ]
       
-      ; End "voting state" in any way after 5 ticks
+      ; End "voting state" in any way after 5 ticks for both vote initiator and participants
       set vote-in-progress? false
-      set vote-initiator? false
-      set ticks-since-vote 0
       set voting-duration 0
       set ticks-since-vote 0
     ]
@@ -115,13 +120,6 @@ to execute-actions
     set ticks-since-vote ticks-since-vote + 1
   ]
   
-  ; Update the ticks since the bus was initialized
-  set ticks-since-init ticks-since-init + 1
-
-  ; Message management
-  process-inbox
-  answer-questions
-
   ; Check if the bus is just initialized
   ifelse ticks-since-init = 1
   [

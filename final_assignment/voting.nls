@@ -3,7 +3,7 @@
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 
-to-report call-vote?
+to-report call-vote
   ;; Initiate a vote about a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
   ;set ratio get-waiting-passengers / count buses
 
@@ -12,7 +12,7 @@ to-report call-vote?
   report disappointment > 2.5 and ticks-since-vote > 30
 end
 
-to-report voting-finished?
+to-report voting-finished
   ;; Check whether all the votes of the current voting have been cast
   report length known-buses + 1 = length received-votes ; Plus vote of mediator bus
 end
@@ -47,7 +47,6 @@ to-report cast-vote [ request ]
   [
      ; Acknowledge that a vote in progress
      set vote-in-progress? true
-     set ticks-since-vote 0
       
      ; Cast the vote
      let sender-id table:get request "sender"
@@ -143,7 +142,7 @@ to-report vote-with-disappointment
   let thresh3 mu + 2 * sigma
   ;show (word "Tresholds: " thresh1 " | " thresh2 " | " thresh3)
   
-  show (word "Disappointment rate: " disappointment-rate)
+  ;show (word "Disappointment rate: " disappointment-rate)
   let vote 0
   
   if disappointment-rate > thresh1
