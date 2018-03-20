@@ -5,15 +5,16 @@
 
 to-report call-vote?
   ;; Initiate a vote about a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
-  set ratio get-waiting-passengers / count buses
+  ;set ratio get-waiting-passengers / count buses
 
   ;report ratio > 50 and ticks-since-vote > 45
-  report ticks-since-vote > 30
+  let disappointment get-disappointment-rate 15
+  report disappointment > 2.5 and ticks-since-vote > 30
 end
 
 to-report voting-finished?
   ;; Check whether all the votes of the current voting have been cast
-  report length known-buses = length received-votes
+  report length known-buses + 1 = length received-votes ; Plus vote of mediator bus
 end
 
 to gather-votes
@@ -44,6 +45,11 @@ to-report cast-vote [ request ]
   
   if action = "ASK-VOTE"
   [
+     ; Acknowledge that a vote in progress
+     set vote-in-progress? true
+     set ticks-since-vote 0
+      
+     ; Cast the vote
      let sender-id table:get request "sender"
      let contract-id table:get request "contract-id"
      ;let vote vote-with-crowdedness
@@ -129,12 +135,12 @@ to-report vote-with-disappointment
   let disappointment-rate get-disappointment-rate t
   let mu 0.00219177 * t * t - 0.155699 * t + 4.66269
   let sigma 0.0110448 * t * t - 0.829527 * t + 25.2988
-  let thresh1 2
-  let thresh2 5
-  let thresh3 10
-  ;let thresh1 mu
-  ;let thresh2 mu + sigma
-  ;let thresh3 mu + 2 * sigma
+  ;let thresh1 2
+  ;let thresh2 5
+  ;let thresh3 10
+  let thresh1 mu
+  let thresh2 mu + sigma
+  let thresh3 mu + 2 * sigma
   ;show (word "Tresholds: " thresh1 " | " thresh2 " | " thresh3)
   
   show (word "Disappointment rate: " disappointment-rate)
@@ -256,6 +262,11 @@ to-report get-disappointment-rate [ t ]
   [
      set disappointment-sum disappointment-sum + item i disappointments
      set i i - 1
+  ]
+  
+  if norm-factor = 0
+  [
+    report 0
   ]
   
   report disappointment-sum / norm-factor

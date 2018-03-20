@@ -21,6 +21,7 @@ buses-own [
   ticks-since-init        ; Records the ticks since the bus has been initialized
   ticks-since-vote        ; Ticks since last vote about new bus
   vote-in-progress?       ; Duh
+  vote-initiator?         ; Was the current bus the one that initiated the most recent vote?
   received-votes          ; Votes received from other buses
   voting-duration         ; Duration of the current vote in ticks
   path-destination        ; Records the shortest path to the destination
@@ -57,6 +58,7 @@ to init-buses
   set initialized? true
   set vote-in-progress? false
   set voting-duration 0
+  set vote-initiator? false
   set ticks-since-init 0
   set received-votes []
   set disappointments []
@@ -67,43 +69,50 @@ to execute-actions
   ; You are allowed to use the global variable 'ticks'.
 
   ; Check if a new bus should be used
-  ; If a certain event is triggered, the "mediator" bus starts a vote among the buses
-  if bus_id = 24
+  ; If a certain event is triggered, the  bus starts a vote among the buses
+  ;show (word "Call vote " call-vote? " | In Progress " vote-in-progress? " | Finished " voting-finished? " | Received " length received-votes " | Known " length known-buses)
+  ;show (word "Received " received-votes)
+  ;show inbox
+  if call-vote? and not vote-in-progress?
   [
-     ;show (word "Call vote " call-vote? " | In Progress " vote-in-progress? " | Finished " voting-finished? " | Received " length received-votes " | Known " length known-buses)
-     ;show inbox
-     if call-vote? and not vote-in-progress?
-     [
-       show "Initating a vote"
-       gather-votes
-       set vote-in-progress? true
-     ]
-     
-     ifelse vote-in-progress?
-     [
-       ; Also stop vote if it takes too long (-> "disappearing votes bug")
-       ifelse voting-finished? or voting-duration > 5
-       [
-         show "Voting finished, analyze results"
-         let voting-result analyze-votes-preference
-         
-         show (word "Result of vote was " voting-result)
-         if voting-result > 0
-         [
-           order-bus voting-result
-         ]
-         set received-votes []
-         set received-votes lput vote-with-disappointment received-votes ; Let the mediator bus vote too
-         set vote-in-progress? false
-         set ticks-since-vote 0
-       ]
-       [
-         set voting-duration voting-duration + 1
-       ]
-     ]
-     [
-       set ticks-since-vote ticks-since-vote + 1
-     ]
+    show "Initating a vote"
+    set received-votes lput vote-with-disappointment received-votes ; Let the mediator bus vote too
+    gather-votes
+    set vote-in-progress? true
+    set vote-initiator? true
+  ]
+  
+  ifelse vote-in-progress?
+  [
+    ; Also stop vote if it takes too long (-> "disappearing votes bug")
+    ifelse voting-duration > 5 or voting-finished?
+    [
+      if vote-initiator?
+      [
+        show "Voting finished, analyze results"
+        let voting-result analyze-votes-preference
+        
+        show (word "Result of vote was " voting-result)
+        if voting-result > 0
+        [
+          order-bus voting-result
+        ]
+        set received-votes []
+      ]
+      
+      ; End "voting state" in any way after 5 ticks
+      set vote-in-progress? false
+      set vote-initiator? false
+      set ticks-since-vote 0
+      set voting-duration 0
+      set ticks-since-vote 0
+    ]
+    [
+      set voting-duration voting-duration + 1
+    ]
+  ]
+  [
+    set ticks-since-vote ticks-since-vote + 1
   ]
   
   ; Update the ticks since the bus was initialized
@@ -218,9 +227,6 @@ to pick-destination
   let max-waiting-stop get-max-waiting-stop
   set max-waiting-stop-tuple fput max-waiting-stop max-waiting-stop-tuple
   set max-waiting-stop-tuple lput length get-passengers-at-stop max-waiting-stop max-waiting-stop-tuple
-  
-  show most-requested-tuple
-  show max-waiting-stop-tuple
 
   ; Choose the max of "most requested destination at the stop" and "stop with the most waiting people"
   ifelse item 1 most-requested-tuple > item 1 max-waiting-stop-tuple
