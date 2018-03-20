@@ -9,7 +9,7 @@ to-report call-vote
 
   ;report ratio > 50 and ticks-since-vote > 45
   let disappointment get-disappointment-rate 15
-  report disappointment > 2.5 and ticks-since-vote > 30
+  report disappointment > 25 and ticks-since-vote > 30 and ticks-since-mediation > 60 and ticks-since-init > 30
 end
 
 to-report voting-finished

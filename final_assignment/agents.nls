@@ -20,6 +20,7 @@ buses-own [
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
   ticks-since-vote        ; Ticks since last vote about new bus
+  ticks-since-mediation   ; Ticks since this bus has initiated a vote itself
   vote-in-progress?       ; Duh
   vote-initiator?         ; Was the current bus the one that initiated the most recent vote?
   received-votes          ; Votes received from other buses
@@ -55,6 +56,7 @@ to init-buses
   ; Infrom other buses in the city that you have been created
   tell-buses-id
   set ticks-since-vote 0
+  set ticks-since-mediation 0
   set initialized? true
   set vote-in-progress? false
   set voting-duration 0
@@ -105,6 +107,7 @@ to execute-actions
         ]
         set received-votes []
         set vote-initiator? false
+        set ticks-since-mediation 0
       ]
       
       ; End "voting state" in any way after 5 ticks for both vote initiator and participants
@@ -118,6 +121,7 @@ to execute-actions
   ]
   [
     set ticks-since-vote ticks-since-vote + 1
+    set ticks-since-mediation ticks-since-mediation + 1
   ]
   
   ; Check if the bus is just initialized
