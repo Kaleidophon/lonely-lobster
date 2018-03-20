@@ -1,23 +1,25 @@
-to-report determine-unserved-passengers [thres]
+to-report determine-unserved-passengers
+  let thres 60
+
 
   let unserved_passengers []
   let bus_stop 0
 
   while [ bus_stop != 23 ]
   [
-    foreach get-passengers-at-stop bus-stop
+    foreach get-passengers-at-stop bus_stop
     [
       let p_id item 0 ?
-      let waiting-time item 4 (item p_id passengers)
-      if waiting-time > thres
+      let waiting_time item 4 (item p_id passengers)
+      if waiting_time > thres
       [
-        set unserved-passengers lput (list p-id waiting_time) unserved-passengers
+        set unserved_passengers lput (list p_id waiting_time bus_stop) unserved_passengers
       ]
     ]
     set bus_stop bus_stop + 1
   ]
 
-  report unserved-passengers
+  report unserved_passengers
 
 end
 
@@ -26,12 +28,14 @@ end
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 
-to-report call-negotiation?
+to-report call-negotiate?
   ;; Initiate a negotiate about a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
-  set unserved_passengers determine-unserved-passengers
+  let unserved_passengers determine-unserved-passengers
 
   ;report ratio > 50 and ticks-since-negotiate > 45
-  report length unserved_passengers > 20 and ticks-since-negotiate > 45
+  let unserved_ratio (length unserved_passengers) / amount_passengers_waiting
+  let negotiate? length unserved_passengers > 20 and ticks-since-negotiate > 45
+  report negotiate?
 end
 
 to-report negotiating-finished?
@@ -57,7 +61,8 @@ to-report add-negotiate [ response ]
 
   ;show (word "Received negotiate " negotiate " from " sender)
 
-  set received-negotiates fput negotiate received-negotiates
+  ; STORE BUS ID AND NEGOTIATE (UTILITY/LOCAL CROWDEDNESS) IN RECEIVED-NEGOTIATES
+  set received-negotiates fput (list sender negotiate) received-negotiates
   report true
 end
 
@@ -70,7 +75,7 @@ to-report cast-negotiate [ request ]
      let sender-id table:get request "sender"
      let contract-id table:get request "contract-id"
      ;let negotiate negotiate-with-crowdedness
-     let negotiate negotiate-with-disappointment
+     let negotiate negotiate-with-utilization
 
      let response negotiate
      ;show (word "negotiating for " negotiate)
@@ -111,4 +116,60 @@ to-report negotiate-with-crowdedness
 
 
   report average-passengers-waiting
+end
+
+to-report analyze-negotiate-preference
+  ;; Analyze the negotiates and make a decision based on konsensus
+
+  show (word "Negotiates: " received-negotiates)
+
+  ; if length received-votes = 0
+  ; [
+  ;    report 1
+  ; ]
+
+  let min_negotiate 99999999
+  let assigned_bus_id -1
+
+  ; Count votes
+  foreach received-negotiates
+  [
+    let negotiate_bus_id item 0 ?
+    let negotiate item 1 ?
+    if negotiate < min_negotiate
+    [
+      set assigned_bus_id negotiate_bus_id
+      set min_negotiate negotiate
+    ]
+  ]
+
+  report assigned_bus_id
+end
+
+to assign-special-bus [assigned_bus_id]
+  ;; Send two-way contracts to other buses asking for their votes
+  let action "ASK-SPECIAL-BUS"
+  let content assigned_bus_id
+
+  foreach known-buses
+  [
+     send-message-with-contract ? action content (task set-special-bus)
+  ]
+end
+
+to-report set-special-bus [ response ]
+  ;; Set a bus as special bus
+  let assigned_bus_id table:get response "content"
+  let action table:get response "action"
+
+  if action = "ASK-NEGOTIATE"
+  [
+    if bus_id = assigned_bus_id
+    [
+      show (word "Setting bus " bus_id " as special bus")
+      set special-bus? true
+      set ticks-since-special-bus 0
+    ]
+  ]
+
 end

@@ -1,4 +1,4 @@
-__includes [ "messaging.nls" "routing.nls" "voting.nls" ]
+__includes [ "messaging.nls" "routing.nls" "voting.nls" "negotiation.nls"]
 
 buses-own [
   ; Static, read-only variables. These values never change. You can read them, but you cannot change them.
@@ -23,6 +23,14 @@ buses-own [
   vote-in-progress?       ; Duh
   received-votes          ; Votes received from other buses
   voting-duration         ; Duration of the current vote in ticks
+
+  ticks-since-negotiate        ; Ticks since last negotiate about new bus
+  negotiate-in-progress?       ; Duh
+  received-negotiates          ; negotiates received from other buses
+  negotiating-duration         ; Duration of the current negotiate in ticks
+  special-bus?                 ; Flag indicating if bus follows special itinerary
+  ticks-since-special-bus
+
   path-destination        ; Records the shortest path to the destination
   blacklisted-stops       ; Records the stops it isn't supposed to use as destination
   capacity                ; Total capacity of bus
@@ -50,7 +58,7 @@ to init-buses
   set pending-contracts table:make
   set assigned-contracts table:make
   ; XXX: Add new reaction to requests as tasks here
-  set reactions (list (task remember-id) (task add-to-blacklist) (task remove-from-blacklist) (task cast-vote))
+  set reactions (list (task remember-id) (task add-to-blacklist) (task remove-from-blacklist) (task cast-vote) (task cast-negotiate) (task set-special-bus))
   ; Infrom other buses in the city that you have been created
   tell-buses-id
   set ticks-since-vote 0
@@ -60,6 +68,13 @@ to init-buses
   set ticks-since-init 0
   set received-votes []
   set disappointments []
+
+  set negotiate-in-progress? false
+  set negotiating-duration 0
+  set ticks-since-init 0
+  set received-negotiates []
+  set special-bus? false
+
 end
 
 to execute-actions
@@ -78,7 +93,7 @@ to execute-actions
        gather-votes
        set vote-in-progress? true
      ]
-     
+
      ifelse vote-in-progress?
      [
        ; Also stop vote if it takes too long (-> "disappearing votes bug")
@@ -86,7 +101,7 @@ to execute-actions
        [
          show "Voting finished, analyze results"
          let voting-result analyze-votes-preference
-         
+
          show (word "Result of vote was " voting-result)
          if voting-result > 0
          [
@@ -104,8 +119,43 @@ to execute-actions
      [
        set ticks-since-vote ticks-since-vote + 1
      ]
+
+     if call-negotiate? and not negotiate-in-progress?
+     [
+       show "Initating a negotiate"
+       gather-negotiates
+       set negotiate-in-progress? true
+     ]
+
+     ifelse negotiate-in-progress?
+     [
+       ; Also stop negotiate if it takes too long (-> "disappearing negotiates bug")
+       ifelse negotiating-finished? or negotiating-duration > 5
+       [
+         show "negotiating finished, analyze results"
+         let negotiating-result analyze-negotiate-preference
+
+         show (word "Result of negotiation: bus " negotiating-result)
+
+         ;;;;;;;;;;TODO
+         let special-bus-id negotiating-result
+         assign-special-bus special-bus-id
+
+         set received-negotiates []
+         set received-negotiates lput (list bus_id negotiate-with-utilization) received-negotiates ; Let the mediator bus negotiate too
+         set negotiate-in-progress? false
+         set ticks-since-negotiate 0
+       ]
+       [
+         set negotiating-duration negotiating-duration + 1
+       ]
+     ]
+     [
+       set ticks-since-negotiate ticks-since-negotiate + 1
+     ]
+
   ]
-  
+
   ; Update the ticks since the bus was initialized
   set ticks-since-init ticks-since-init + 1
 
@@ -133,7 +183,19 @@ to execute-actions
       pick-destination ; Pick new destination
       tell-going-to known-buses ; Tell others your destination
       ; show (word "Destination: " target-stop)
-      set itinerary get-path-destination
+      ifelse ((special-bus?) and (length itinerary > 0))
+      [
+        ifelse ticks-since-special-bus = 0
+        [
+          set itinerary get-special-path determine-unserved-passengers
+        ]
+        [
+          set ticks-since-special-bus ticks-since-special-bus + 1
+        ]
+      ]
+      [
+        set itinerary get-path-destination
+      ]
       ;show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
     ]
@@ -176,7 +238,7 @@ end
 to pick-up-at-station
   ;; Pick up all the passengers whose destination is in the itinerary
   let current-disappointments 0  ; Number of passengers that couldn't be picked up at the current station
-  
+
   foreach itinerary
   [
     let stop-i ?
@@ -195,7 +257,7 @@ to pick-up-at-station
       ]
     ]
   ]
-  
+
   set disappointments lput current-disappointments disappointments
 end
 

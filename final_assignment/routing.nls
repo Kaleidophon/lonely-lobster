@@ -72,3 +72,108 @@ to-report get-path-destination
 
   report shortest-path
 end
+
+to-report get-shortest-path-between [from_station to_station]
+  let bus-stop-i 0
+  let distance-to-source table:make ; To store the distance of the shortest path to the source node
+  let backtrack table:make ; To keep track of the previous node in the path
+
+  ; Initialize distance-to-source with 0 for source node and for others initialize with infinity
+  while [bus-stop-i <= 23]
+  [
+    if bus-stop-i != from_station
+    [
+      table:put distance-to-source bus-stop-i 999999
+    ]
+    set bus-stop-i bus-stop-i + 1
+  ]
+  table:put distance-to-source from_station 0
+
+  ; Heap to keep track of the nodes to find shortest path to the source
+  let heap table:keys distance-to-source
+
+  while [ not empty? heap]
+  [
+    let min-distance 9999999
+    let min-index 0
+    foreach heap
+    [
+      if table:get distance-to-source ? < min-distance
+      [
+        set min-distance table:get distance-to-source ?
+        set min-index ?
+      ]
+    ]
+    set heap remove min-index heap
+
+    ; show (word "Heap " heap)
+
+    foreach item min-index graph
+    [
+      let path-length table:get distance-to-source min-index + get-distance min-index ?
+      if table:get distance-to-source ? > path-length
+      [
+        table:put distance-to-source ? path-length
+        table:put backtrack ? min-index
+      ]
+    ]
+    ; show (word "Distances from source " table:to-list distance-to-source)
+  ]
+
+  ; Backtrack to the source using the bracktrack table
+  let backtrack-stop to_station
+  ; Variable to store the shortest path
+  let shortest-path []
+
+  ; Start by adding the target stop
+  set shortest-path fput to_station shortest-path
+
+  while [backtrack-stop != from_station]
+  [
+    set backtrack-stop table:get backtrack backtrack-stop
+    ; Keep adding the previous node to the shortest path while backtracking to the source
+    if backtrack-stop != from_station
+    [
+      set shortest-path fput backtrack-stop shortest-path
+    ]
+  ]
+
+  ; show (word "Shortest path" shortest-path)
+
+  report shortest-path
+end
+
+to-report get-special-path [unserved_passengers]
+  let still-to-be-visited map [item 2 ?] unserved_passengers
+  let special_itinerary (list current_stop)
+
+  let index 0 
+  while [length still-to-be-visited > 0]
+  [
+    let shortest-intermediate-path []
+    let shortest-intermediate-length 999999
+
+    let min-index 0
+    foreach still-to-be-visited
+    [
+      let from_station last itinerary
+      let path get-shortest-path-between from_station ?
+      let quasi-path-length length path
+      if (quasi-path-length < shortest-intermediate-length)
+      [
+        set shortest-intermediate-path path
+        set shortest-intermediate-length quasi-path-length
+      ]
+      set min-index min-index + 1
+    ]
+
+    foreach shortest-intermediate-path
+    [
+      set special_itinerary lput ? special_itinerary
+    ]
+
+    set still-to-be-visited remove min-index still-to-be-visited
+  ]
+
+  report special_itinerary
+end
