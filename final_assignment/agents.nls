@@ -27,6 +27,7 @@ buses-own [
   assigned-contracts      ; table of requests received by other buses
   reactions               ; List of tasks of function that are used to react to an incoming request by another bus
   known-buses             ; List of other known buses
+  epsilon                 ; Probability of choosing another than the greedy option when picking the next destination
 ]
 
 extensions [table]
@@ -52,6 +53,7 @@ to init-buses
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
+  set epsilon 2
 end
 
 to execute-actions
@@ -72,23 +74,23 @@ to execute-actions
   [
       pick-destination ; Pick the initial destination
       tell-going-to known-buses ; Tell other buses your destination
-      show (word "Destination: " target-stop)
+      ;show (word "Destination: " target-stop)
       set itinerary get-path-destination current_stop target-stop ; Update itinerary with the shortest path to buses destination
-      show (word "New Itinerary: " itinerary)
+      ;show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
   ]
   [
     ifelse current_stop = target-stop
     ; Bus is at a station
     [
-      show (word " Reached destination " current_stop)
+      ;show (word " Reached destination " current_stop)
       drop-off-at-station ; Drop off remaining passengers in the bus since it should be the last stop in the itinerary
       tell-reached ; Tell other buses that you have reached your destination and they can remove that stop from blacklist
       pick-destination ; Pick new destination
       tell-going-to known-buses ; Tell others your destination
       ; show (word "Destination: " target-stop)
       set itinerary get-path-destination current_stop target-stop
-      show (word "New Itinerary: " itinerary)
+      ;show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
     ]
     ; Bus is still on the road
@@ -161,7 +163,7 @@ end
 
 to pick-destination
 
-  show (word "Blacklist " blacklisted-stops)
+  ;show (word "Blacklist " blacklisted-stops)
 
   let most-requested-tuple get-most-requested-stop
   let max-waiting-stop-tuple []
@@ -173,9 +175,20 @@ to pick-destination
   ifelse item 1 most-requested-tuple > item 1 max-waiting-stop-tuple
   [
       set target-stop item 0 most-requested-tuple
+      if random 101 <= epsilon * 100
+      [
+         let requested-destinations table:keys get-destination-counter
+         set target-stop item random length requested-destinations requested-destinations
+      ]
   ]
   [
       set target-stop item 0 max-waiting-stop-tuple
+      if random 101 <= epsilon * 100
+      [
+        let possible-stops get-non-empty-stops
+        set target-stop item random length possible-stops possible-stops
+        ;set target-stop random 24
+      ]
   ]
 end
 
@@ -279,25 +292,27 @@ to-report get-max-waiting-stop
   report max-waiting-stop
 end
 
+to-report get-non-empty-stops
+  let non-empty-stops []
+  let bus-stop-i 0
+  
+  while [ bus-stop-i < 24 ]
+  [
+     if bus-stop-i != current_stop and length get-passengers-at-stop bus-stop-i > 0
+     [
+       set non-empty-stops lput bus-stop-i non-empty-stops
+     ]
+     set bus-stop-i bus-stop-i + 1
+  ]
+  
+  report non-empty-stops
+end
+
 to-report get-most-requested-stop
   ;; Return the most requested destination stop at the current stop
-  let passenger-at-stop get-passengers-at-stop current_stop
-  let destination-counter table:make
-  let bus-stop-i 0
   let max-passenger-stop 0
   let max-passenger-stop-count -1
-
-  while [bus-stop-i <= 23]
-  [
-    table:put destination-counter bus-stop-i 0
-    set bus-stop-i bus-stop-i + 1
-  ]
-
-  foreach passenger-at-stop
-  [
-    let destination-passengers table:get destination-counter item 1 ?
-    table:put destination-counter item 1 ? destination-passengers + 1
-  ]
+  let destination-counter get-destination-counter
 
   foreach blacklisted-stops
   [
@@ -326,4 +341,25 @@ to-report get-most-requested-stop
   set max-passenger-stop-tuple lput max-passenger-stop-count max-passenger-stop-tuple
 
   report max-passenger-stop-tuple
+end
+
+to-report get-destination-counter
+  ;; Return how often a stop is requested by passengers at the current stop
+  let passenger-at-stop get-passengers-at-stop current_stop
+  let destination-counter table:make
+  let bus-stop-i 0
+  
+  while [bus-stop-i <= 23]
+  [
+    table:put destination-counter bus-stop-i 0
+    set bus-stop-i bus-stop-i + 1
+  ]
+
+  foreach passenger-at-stop
+  [
+    let destination-passengers table:get destination-counter item 1 ?
+    table:put destination-counter item 1 ? destination-passengers + 1
+  ]
+  
+  report destination-counter
 end
