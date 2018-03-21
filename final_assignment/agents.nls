@@ -73,7 +73,7 @@ to execute-actions
       pick-destination ; Pick the initial destination
       tell-going-to known-buses ; Tell other buses your destination
       show (word "Destination: " target-stop)
-      set itinerary get-path-destination ; Update itinerary with the shortest path to buses destination
+      set itinerary get-path-destination current_stop target-stop ; Update itinerary with the shortest path to buses destination
       show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
   ]
@@ -87,7 +87,7 @@ to execute-actions
       pick-destination ; Pick new destination
       tell-going-to known-buses ; Tell others your destination
       ; show (word "Destination: " target-stop)
-      set itinerary get-path-destination
+      set itinerary get-path-destination current_stop target-stop
       show (word "New Itinerary: " itinerary)
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
     ]
