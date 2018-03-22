@@ -69,3 +69,31 @@ to-report get-path-destination [ from-stop to-stop ]
 
   report shortest-path
 end
+
+to-report get-pickup-estimate
+  ;; Estimating the number of people that are going to be picked up during the next few stops
+  let temp-count 0
+
+  foreach itinerary
+  [
+    let current-passengers get-passengers-at-stop ?
+    foreach current-passengers
+    [
+        if member? item 1 ? itinerary
+        [
+            set temp-count temp-count + 1
+        ]
+    ]
+  ]
+
+  report temp-count
+end
+
+to-report get-remaining-capacity
+  ;; Return the remaining capacity of the current bus, taking into account passengers at station 
+  ;; of the current itinerary
+  let remaining-capacity get-capacity
+  set remaining-capacity capacity - length bus_passengers
+  set remaining-capacity capacity - get-pickup-estimate
+  report remaining-capacity
+end
