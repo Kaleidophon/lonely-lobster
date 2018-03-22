@@ -86,40 +86,40 @@ to execute-actions
   [
       pick-destination
       tell-going-to known-buses
-      show (word "Destination: " target-stop)
+      ; show (word "Destination: " target-stop)
       set itinerary get-path-destination
-      show (word "New Itinerary: " itinerary)
+      ; show (word "New Itinerary: " itinerary)
       pick-up-at-station
   ]
   [
     ifelse current_stop = target-stop
     ; Bus is at a station
     [
-      show (word " Reached destination " current_stop)
+      ; show (word " Reached destination " current_stop)
       drop-off-at-station
       tell-reached
       pick-destination
       tell-going-to known-buses
-      show (word "Destination: " target-stop)
+      ; show (word "Destination: " target-stop)
       set itinerary get-path-destination
-      show (word "New Itinerary: " itinerary)
+      ; show (word "New Itinerary: " itinerary)
       pick-up-at-station
     ]
     ; Bus is still on the road
     [
-      show (word "Still on road at " current_stop)
-      show (word "Next-stop " next_stop)
+      ; show (word "Still on road at " current_stop)
+      ; show (word "Next-stop " next_stop)
       ifelse current_stop = -1
       [
         travel-to next_stop
       ]
       [
-        show (word "Still on road at " current_stop)
+        ; show (word "Still on road at " current_stop)
         drop-off-at-station
         pick-up-at-station
         let got-to-stop item 0 itinerary
         set itinerary remove-item 0 itinerary
-        show (word "Go-to-stop " got-to-stop)
+        ; show (word "Go-to-stop " got-to-stop)
         travel-to got-to-stop
       ]
     ]
@@ -145,25 +145,56 @@ to pick-up-at-station
   ;; Pick up all the passengers whose destination is in the itinerary
 
   let current-disappointments 0  ; Number of passengers that couldn't be picked up at the current station
+  let num-removed 0
 
   set itinerary reverse itinerary
 
-  foreach itinerary
-  [
-    let stop-i ?
+  ; foreach itinerary
+  ; [
+  ;   let stop-i ?
+  ;
+  ;   foreach get-passengers-at-stop current_stop
+  ;   [
+  ;     if item 1 ? = stop-i
+  ;     [
+  ;       ifelse not bus-full?
+  ;       [
+  ;         pick-up-passenger item 0 ?
+  ;       ]
+  ;       [
+  ;         set current-disappointments current-disappointments + 1
+  ;       ]
+  ;     ]
+  ;   ]
+  ; ]
 
-    foreach get-passengers-at-stop current_stop
+  let passenger-at-destination get-passengers-at-stop current_stop
+
+  foreach passenger-at-destination
+  [
+    ifelse member? item 1 ? itinerary
     [
-      if item 1 ? = stop-i
-      [
         ifelse not bus-full?
         [
-          pick-up-passenger item 0 ?
+            pick-up-passenger item 0 ?
         ]
         [
-          set current-disappointments current-disappointments + 1
+            set num-removed num-removed + try-remove-buspassenger
+            ifelse not bus-full?
+            [
+                pick-up-passenger item 0 ?
+            ]
+            [
+                set current-disappointments current-disappointments + 1
+            ]
         ]
-      ]
+    ]
+    [
+        let space-left get-capacity - length bus_passengers - get-pickup-estimate
+        if space-left > 0
+        [
+            pick-up-passenger item 0 ?
+        ]
     ]
   ]
 
@@ -173,11 +204,21 @@ to pick-up-at-station
   set bus-fullness lput length bus_passengers bus-fullness
   set still-waiting lput length get-passengers-at-stop current_stop still-waiting
 
-  show (word "Disappointmented passangers: " last disappointments)
-  show (word "Capacity of the bus: " get-capacity)
-  show (word "Number of Passangers in the bus: " last bus-fullness)
-  show (word "Number of waiting passangers: " last still-waiting)
-  show (word "Waiting passangers: " get-passengers-at-stop current_stop)
+  let passenger-destinations []
+
+  foreach bus_passengers
+  [
+    set passenger-destinations lput item 1 ? passenger-destinations
+  ]
+
+  ; show (word "Disappointmented passangers: " last disappointments)
+  ; show (word "Capacity of the bus: " get-capacity)
+  ; show (word "Number of Passangers in the bus: " last bus-fullness)
+  ; show (word "Number of waiting passangers: " last still-waiting)
+  ; show (word "Waiting passangers: " get-passengers-at-stop current_stop)
+  ; show (word "Passangers in the bus: " bus_passengers)
+  ; show (word "Anticipated pickups: " get-pickup-estimate)
+  ; show (word "Number of removed: " num-removed)
 
   ; ifelse bus-full?
   ; [
@@ -337,6 +378,12 @@ to-report get-most-requested-stop
   let max-passenger-stop 0
   let max-passenger-stop-count -1
 
+  ; Add the remaining passengers in the bus too for this calculation
+  foreach bus_passengers
+  [
+    set passenger-at-stop lput ? passenger-at-stop
+  ]
+
   while [bus-stop-i <= 23]
   [
     table:put destination-counter bus-stop-i 0
@@ -349,13 +396,13 @@ to-report get-most-requested-stop
     table:put destination-counter item 1 ? destination-passengers + 1
   ]
 
-  foreach blacklisted-stops
-  [
-    if table:has-key? destination-counter ?
-    [
-      table:remove destination-counter ?
-    ]
-  ]
+  ; foreach blacklisted-stops
+  ; [
+  ;   if table:has-key? destination-counter ?
+  ;   [
+  ;     table:remove destination-counter ?
+  ;   ]
+  ; ]
 
   if table:has-key? destination-counter current_stop
   [
@@ -376,4 +423,40 @@ to-report get-most-requested-stop
   set max-passenger-stop-tuple lput max-passenger-stop-count max-passenger-stop-tuple
 
   report max-passenger-stop-tuple
+end
+
+to-report get-pickup-estimate
+
+  let temp-count 0
+
+  foreach itinerary
+  [
+    let current-passengers get-passengers-at-stop ?
+    foreach current-passengers
+    [
+        if member? item 1 ? itinerary
+        [
+            set temp-count temp-count + 1
+        ]
+    ]
+  ]
+
+  report temp-count
+end
+
+to-report try-remove-buspassenger
+
+    let removed 0
+
+    foreach bus_passengers
+    [
+        if not member? item 1 ? itinerary and removed = 0
+        [
+            drop-off-passenger item 0 ?
+            set removed 1
+        ]
+    ]
+
+    report removed
+
 end
