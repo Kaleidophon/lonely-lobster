@@ -157,17 +157,19 @@ to-report pick-transfer [ possible-transfer-buses ]
      ; Get distance of other bus to transfer stop
      let other-distance-to-transfer get-distance-to-itinerary-stop transfer-stop other-itinerary
      
-     show (word "(This) Itinerary: " itinerary " |  Stop: " transfer-stop " | Distance: " this-distance-to-transfer)
-     show (word "(Other) Itinerary: " other-itinerary " |  Stop: " transfer-stop " | Distance: " other-distance-to-transfer)
+     ;show (word "(This) Itinerary: " itinerary " |  Stop: " transfer-stop " | Distance: " this-distance-to-transfer)
+     ;show (word "(Other) Itinerary: " other-itinerary " |  Stop: " transfer-stop " | Distance: " other-distance-to-transfer)
      
-     if not (this-distance-to-transfer < other-distance-to-transfer)
+     if this-distance-to-transfer < other-distance-to-transfer
      [
          ;show "Insufficient"
-         table:remove possible-transfer-buses ?
+         let chosen-transfer (list ? transfer-stop)
+         report chosen-transfer
+         ;table:remove possible-transfer-buses ?
      ]
   ]  
   
-  report possible-transfer-buses
+  report []
 end
 
 to-report get-distance-to-itinerary-stop [ transfer-stop some-itinerary ]
