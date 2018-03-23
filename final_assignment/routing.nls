@@ -93,8 +93,8 @@ to-report get-remaining-capacity
   ;; Return the remaining capacity of the current bus, taking into account passengers at station 
   ;; of the current itinerary
   let remaining-capacity get-capacity
-  set remaining-capacity capacity - length bus_passengers
-  set remaining-capacity capacity - get-pickup-estimate
+  set remaining-capacity remaining-capacity - length bus_passengers
+  set remaining-capacity remaining-capacity - get-pickup-estimate
   report remaining-capacity
 end
 
@@ -103,16 +103,99 @@ to-report get-transfer-buses-for-passenger [ passenger ]
   ;; and get them to their final destination after the current bus dropped them off somewhere
   ;; along the way.
   let passenger-destination item 1 passenger
-  let transfer-buses []
+  let transfer-buses table:make  ; Table from bus-id -> possible transfer stop
   
   foreach table:keys bus-itineraries
   [
       let other-itinerary table:get bus-itineraries ?
-      if member? passenger-destination other-itinerary
+      ;show (word "This: " itinerary)
+      ;show (word "Other: " other-itinerary)
+      let itinerary-set []
+      set itinerary-set fput itinerary itinerary-set
+      set itinerary-set fput other-itinerary itinerary-set
+      
+      let itinerary-intersection reduce intersect itinerary-set
+      
+      ; A transfer bus is a transfer bus if
+      ; a) The passenger's destination is in the transfer buses' itinerary
+      ; b) If there is an intersection between the current buses' itinerary and the transfer buses' itinerary
+      ; c) If the passenger destinations comes after the transfer stop in the transfer-buses itinerary
+      if length itinerary-intersection > 0
       [
-         set transfer-buses fput ? transfer-buses
+          let transfer-stop item 0 itinerary-intersection 
+          if member? passenger-destination other-itinerary and position transfer-stop other-itinerary < position passenger-destination other-itinerary and transfer-stop != current_stop
+          [
+              table:put transfer-buses ? transfer-stop
+          ]
       ]
   ]
   
   report transfer-buses
 end
+
+to-report intersect [a b]
+   report (filter [ member? ? b ] a)
+end
+
+to-report pick-transfer [ possible-transfer-buses ]
+  ;; Having determined buses that could serve as a possible transfer bus at one of the stops
+  ;; on this buses' itinerary, pick a stop that a passenger could be dropped off at for transfer.
+  ;; If none could be found, the passenger shouldn't be picked up.
+  foreach table:keys possible-transfer-buses
+  [
+     let transfer-stop table:get possible-transfer-buses ?
+     let other-itinerary table:get bus-itineraries ?
+     let this-itinerary itinerary
+     if current_stop != -1
+     [
+         set this-itinerary fput current_stop this-itinerary
+     ]
+     
+     ; Get distance of current bus to transfer stop
+     let this-distance-to-transfer get-distance-to-itinerary-stop transfer-stop this-itinerary
+     
+     ; Get distance of other bus to transfer stop
+     let other-distance-to-transfer get-distance-to-itinerary-stop transfer-stop other-itinerary
+     
+     show (word "(This) Itinerary: " itinerary " |  Stop: " transfer-stop " | Distance: " this-distance-to-transfer)
+     show (word "(Other) Itinerary: " other-itinerary " |  Stop: " transfer-stop " | Distance: " other-distance-to-transfer)
+     
+     if not (this-distance-to-transfer < other-distance-to-transfer)
+     [
+         ;show "Insufficient"
+         table:remove possible-transfer-buses ?
+     ]
+  ]  
+  
+  report possible-transfer-buses
+end
+
+to-report get-distance-to-itinerary-stop [ transfer-stop some-itinerary ]
+  ;; Get the distance of bus from it's current stop to some other stop on its itinerary
+  let distance-to-transfer 0
+  let itinerary-i 0
+  let last-stop -1
+  let reached-transfer? false
+  
+  if item 0 some-itinerary != transfer-stop
+  [
+    while [ not reached-transfer? and itinerary-i < length some-itinerary ]
+    [
+      let current-itinerary-stop item itinerary-i some-itinerary
+      if itinerary-i > 0 and not reached-transfer?
+      [
+        set distance-to-transfer distance-to-transfer + get-distance last-stop current-itinerary-stop 
+        if current-itinerary-stop = transfer-stop
+        [
+          set reached-transfer? true
+        ]
+      ]
+      
+      set last-stop current-itinerary-stop
+      set itinerary-i itinerary-i + 1
+    ]
+  ]
+  
+  report distance-to-transfer
+end
+

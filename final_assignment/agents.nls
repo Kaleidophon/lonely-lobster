@@ -142,10 +142,16 @@ to pick-up-at-station
       [
         ; Check if the passenger could be delivired by another bus with which you are crossing paths anyway
         let transfer-buses get-transfer-buses-for-passenger ?
-        if length transfer-buses > 0
+        if length table:keys transfer-buses > 0 and get-remaining-capacity > 0
         [
-          show (word "These possible transfers found for passenger " ? ": " transfer-buses)
-         show bus-itineraries
+            let selected-transfers pick-transfer transfer-buses
+            if length table:keys selected-transfers > 0
+            [
+                show (word "These possible transfers found for passenger " ? ": " transfer-buses)
+                show (word "Remaining capacity: " get-remaining-capacity )
+                show bus-itineraries
+                show (word "Selected transfers: " selected-transfers)
+            ]
         ]
       ]
     ]

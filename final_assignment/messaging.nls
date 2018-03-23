@@ -87,6 +87,11 @@ to tell-going-to [ other-buses ]
   [
     set future-itinerary fput target-stop future-itinerary
   ]
+  if current_stop != -1
+  [
+    set future-itinerary fput current_stop future-itinerary  ; Include the current stop
+    ;show (word "Future " future-itinerary)
+  ]
   
   let content future-itinerary
 
