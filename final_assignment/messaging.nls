@@ -78,21 +78,17 @@ to tell-buses-id
   ]
 end
 
-to-report update [ response ]
-  ;; Verify that the handshake has been successful.
-  ;; TODO: This is just to test the messaging logic. Remove later.
-
-  let sender table:get response "sender"
-  let content table:get response "content"
-
-  show (word "Bus " sender " says: " content)
-  report true
-end
-
-to tell-going-to [other-buses]
-  ;; Have a bus introduce itself after its creation
+to tell-going-to [ other-buses ]
+  ;; Have a bus tell other buses its current itinerary
   let action "TELL-GOING-TO"
-  let content target-stop
+  
+  let future-itinerary itinerary
+  if length future-itinerary = 0
+  [
+    set future-itinerary fput target-stop future-itinerary
+  ]
+  
+  let content future-itinerary
 
   ; Send message to all other buses
   foreach other-buses
@@ -144,7 +140,11 @@ to-report add-to-blacklist [ request ]
     let contract-id table:get request "contract-id"
 
     ; Add the sender destination to the blacklist
-    let sender-destination table:get request "content"
+    let future-itinerary table:get request "content"
+    let sender-destination item (length future-itinerary - 1) future-itinerary 
+    
+    ; Remember the buses itinerary
+    table:put bus-itineraries sender-id future-itinerary
     set blacklisted-stops fput sender-destination blacklisted-stops
 
     report fulfill-assigned-contract contract-id

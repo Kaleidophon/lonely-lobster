@@ -97,3 +97,22 @@ to-report get-remaining-capacity
   set remaining-capacity capacity - get-pickup-estimate
   report remaining-capacity
 end
+
+to-report get-transfer-buses-for-passenger [ passenger ]
+  ;; Get the IDs of all the buses that could potentionally pick up this passengers 
+  ;; and get them to their final destination after the current bus dropped them off somewhere
+  ;; along the way.
+  let passenger-destination item 1 passenger
+  let transfer-buses []
+  
+  foreach table:keys bus-itineraries
+  [
+      let other-itinerary table:get bus-itineraries ?
+      if member? passenger-destination other-itinerary
+      [
+         set transfer-buses fput ? transfer-buses
+      ]
+  ]
+  
+  report transfer-buses
+end
