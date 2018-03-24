@@ -158,7 +158,7 @@ to pick-up-at-station
       [
         ; Check if the passenger could be delivired by another bus with which you are crossing paths anyway
         let selected-transfer get-transfer-bus-for-passenger ?
-        if length selected-transfer > 0 and get-remaining-capacity > 0
+        if length selected-transfer > 0 and get-remaining-capacity2 > 0
         [
           ;show (word "Selected transfer for passenger " ? " at stop " current_stop)
           let transfer-bus-id item 0 selected-transfer

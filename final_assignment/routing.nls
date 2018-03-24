@@ -98,6 +98,56 @@ to-report get-remaining-capacity
   report remaining-capacity
 end
 
+to-report unpack [ element ]
+  report item 1 element
+end
+
+to-report frequency [i lst]
+  report length filter [? = i] lst
+end
+
+
+to-report get-remaining-capacity2
+  let projected-passengers bus_passengers
+  let projected-capacity length bus_passengers
+  let future-transfer-stops []
+  
+  if length table:keys future-transfers > 0
+  [
+      set future-transfer-stops map unpack table:to-list future-transfers
+  ]
+
+  foreach itinerary
+  [
+    let future-stop ?
+    
+    ; Account for people that are boarding the bus at future stops
+    foreach projected-passengers
+    [
+        if future-stop = item 1 ?
+        [ 
+           set projected-capacity projected-capacity - 1
+        ]
+    ]
+    
+    ; Account for people who are leaving the bus at future stops as their final destination
+    let current-passengers get-passengers-at-stop future-stop
+    foreach current-passengers
+    [ 
+        if member? item 1 ? itinerary
+        [
+            set projected-capacity projected-capacity + 1
+            set projected-passengers lput ? projected-passengers
+        ]
+    ]
+    
+    ; Account for people who are leaving the bus at future stops as their transfer stop
+    set projected-capacity projected-capacity + frequency future-stop future-transfer-stops   
+  ]
+  
+  report projected-capacity
+end
+
 to-report get-transfer-bus-for-passenger [ passenger ]
   ;; Get the IDs of all the buses that could potentionally pick up this passengers 
   ;; and get them to their final destination after the current bus dropped them off somewhere
