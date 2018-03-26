@@ -112,10 +112,10 @@ to-report get-remaining-capacity2
   let projected-capacity length bus_passengers
   let future-transfer-stops []
   
-  if length table:keys future-transfers > 0
-  [
-      set future-transfer-stops map unpack table:to-list future-transfers
-  ]
+  ;if length table:keys future-transfers > 0
+  ;[
+  ;    set future-transfer-stops map unpack table:to-list future-transfers
+  ;]
 
   foreach itinerary
   [
@@ -142,9 +142,8 @@ to-report get-remaining-capacity2
     ]
     
     ; Account for people who are leaving the bus at future stops as their transfer stop
-    set projected-capacity projected-capacity + frequency future-stop future-transfer-stops   
   ]
-  
+  set projected-capacity projected-capacity + length table:keys future-transfers
   report projected-capacity
 end
 
@@ -179,6 +178,7 @@ to-report get-transfer-bus-for-passenger [ passenger ]
               [
                   report (list ? transfer-stop)
               ]
+              ;report (list ? transfer-stop)
           ]
       ]
   ]
@@ -218,14 +218,14 @@ to-report transfer-tractable? [ transfer-stop other-itinerary ]
   report false
 end
 
-to-report get-distance-to-itinerary-stop [ transfer-stop some-itinerary ]
+to-report get-distance-to-itinerary-stop [ itinerary-stop some-itinerary ]
   ;; Get the distance of bus from it's current stop to some other stop on its itinerary
   let distance-to-transfer 0
   let itinerary-i 0
   let last-stop -1
   let reached-transfer? false
   
-  if item 0 some-itinerary != transfer-stop
+  if item 0 some-itinerary != itinerary-stop
   [
     while [ not reached-transfer? and itinerary-i < length some-itinerary ]
     [
@@ -233,7 +233,7 @@ to-report get-distance-to-itinerary-stop [ transfer-stop some-itinerary ]
       if itinerary-i > 0 and not reached-transfer?
       [
         set distance-to-transfer distance-to-transfer + get-distance last-stop current-itinerary-stop 
-        if current-itinerary-stop = transfer-stop
+        if current-itinerary-stop = itinerary-stop
         [
           set reached-transfer? true
         ]
@@ -245,5 +245,12 @@ to-report get-distance-to-itinerary-stop [ transfer-stop some-itinerary ]
   ]
   
   report distance-to-transfer
+end
+
+to-report get-stop-distance [ from-stop to-stop ]
+  ;; Report the total distance between two stop, taking into account all the stops in between
+  let itinerary-stops get-path-destination from-stop to-stop
+  let itinerary-distance get-distance-to-itinerary-stop to-stop itinerary-stops
+  report itinerary-distance
 end
 
