@@ -160,7 +160,8 @@ to pick-up-at-station
       [
         ; Check if the passenger could be delivired by another bus with which you are crossing paths anyway
         let selected-transfer get-transfer-bus-for-passenger ?
-        if length selected-transfer > 0 and get-remaining-capacity > 0
+        if length selected-transfer > 0 and get-remaining-capacity > 0 and not bus-full?
+        ;if length selected-transfer > 0 and get-current-capacity > 0
         [
           ;show (word "Selected transfer for passenger " ? " at stop " current_stop)
           let transfer-bus-id item 0 selected-transfer
@@ -180,9 +181,14 @@ to pick-up-at-station
         ;[
           ; Take them on the bus if the distance from this buses' target stop to the passenger destination is lower than from the current stop
           ; Essentially: Carry them closer to their destination
-        ;  if length bus_passengers != get-capacity and get-stop-distance current_stop passenger-destination > get-stop-distance target-stop passenger-destination
+        ;  show (word "Obtaining " current_stop "-" passenger-destination)
+        ;  let curr-dist get-stop-distance current_stop passenger-destination
+        ;  show (word "Obtaining " target-stop "-" passenger-destination)
+        ;  let targ-dist get-stop-distance target-stop passenger-destination
+        ;  if curr-dist > targ-dist and not bus-full?
         ;  [
-             
+        ;     pick-up-passenger passenger-id
+        ;     table:put future-transfers passenger-id target-stop
         ;  ]
         ;]
       ]

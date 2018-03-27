@@ -61,7 +61,7 @@ to-report get-path-destination [ from-stop to-stop ]
   [
     set backtrack-stop table:get backtrack backtrack-stop
     ; Keep adding the previous node to the shortest path while backtracking to the source
-    if backtrack-stop != current_stop
+    if backtrack-stop != from-stop
     [
       set shortest-path fput backtrack-stop shortest-path
     ]
@@ -145,6 +145,11 @@ to-report get-remaining-capacity2
   ]
   set projected-capacity projected-capacity + length table:keys future-transfers
   report projected-capacity
+end
+
+to-report get-current-capacity
+  let max-capacity get-capacity
+  report max-capacity - length bus_passengers
 end
 
 to-report get-transfer-bus-for-passenger [ passenger ]
@@ -247,10 +252,33 @@ to-report get-distance-to-itinerary-stop [ itinerary-stop some-itinerary ]
   report distance-to-transfer
 end
 
+to-report get-itinerary-length [ some-itinerary ]
+  ;; Get the total length of an itinerary
+  let total-distance 0
+  let itinerary-i 1
+  
+  while [ itinerary-i < length some-itinerary ]
+  [
+     show (word "Dist " item (itinerary-i - 1) some-itinerary "-" item itinerary-i some-itinerary)
+     set total-distance total-distance + get-distance (item (itinerary-i - 1) some-itinerary) (item itinerary-i some-itinerary)
+     set itinerary-i itinerary-i + 1
+  ]
+  
+  report total-distance
+end
+
 to-report get-stop-distance [ from-stop to-stop ]
   ;; Report the total distance between two stop, taking into account all the stops in between
+  show (word "From " from-stop " to " to-stop)
   let itinerary-stops get-path-destination from-stop to-stop
-  let itinerary-distance get-distance-to-itinerary-stop to-stop itinerary-stops
+  
+  ;if item 0 itinerary-stops != from-stop
+  ;[
+  ;   set itinerary-stops fput from-stop itinerary-stops
+  ;]
+  show (word "Itinerary: " itinerary-stops)
+  let itinerary-distance get-itinerary-length itinerary-stops
+  show (word "Distance: " itinerary-distance)
   report itinerary-distance
 end
 
