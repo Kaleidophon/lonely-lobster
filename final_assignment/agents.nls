@@ -194,6 +194,24 @@ to pick-up-at-station
       ]
     ]
   ]
+  
+  ; Fill up the bus with other passengers at the current stop if it brings them closer to their destination
+  if length itinerary > 0
+  [
+     let next-up item 0 itinerary
+     foreach get-passengers-at-stop current_stop
+     [
+       let passenger-id item 0 ?
+       let passenger-destination item 1 ?
+       let curr-dist get-stop-distance current_stop passenger-destination
+       let next-dist get-stop-distance next-up passenger-destination
+       if curr-dist > next-dist and not bus-full?
+       [
+         pick-up-passenger passenger-id
+         table:put future-transfers passenger-id next-up
+       ]
+     ]
+  ]
 end
 
 to-report get-passenger-destinations

@@ -259,7 +259,7 @@ to-report get-itinerary-length [ some-itinerary ]
   
   while [ itinerary-i < length some-itinerary ]
   [
-     show (word "Dist " item (itinerary-i - 1) some-itinerary "-" item itinerary-i some-itinerary)
+     ;show (word "Dist " item (itinerary-i - 1) some-itinerary "-" item itinerary-i some-itinerary)
      set total-distance total-distance + get-distance (item (itinerary-i - 1) some-itinerary) (item itinerary-i some-itinerary)
      set itinerary-i itinerary-i + 1
   ]
@@ -269,16 +269,16 @@ end
 
 to-report get-stop-distance [ from-stop to-stop ]
   ;; Report the total distance between two stop, taking into account all the stops in between
-  show (word "From " from-stop " to " to-stop)
+  ;show (word "From " from-stop " to " to-stop)
   let itinerary-stops get-path-destination from-stop to-stop
   
   ;if item 0 itinerary-stops != from-stop
   ;[
   ;   set itinerary-stops fput from-stop itinerary-stops
   ;]
-  show (word "Itinerary: " itinerary-stops)
+  ;show (word "Itinerary: " itinerary-stops)
   let itinerary-distance get-itinerary-length itinerary-stops
-  show (word "Distance: " itinerary-distance)
+  ;show (word "Distance: " itinerary-distance)
   report itinerary-distance
 end
 
