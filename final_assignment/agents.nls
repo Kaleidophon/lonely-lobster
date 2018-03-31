@@ -28,8 +28,10 @@ buses-own [
   reactions               ; List of tasks of function that are used to react to an incoming request by another bus
   known-buses             ; List of other known buses
   bus-itineraries         ; Itineraries of other buses
-  future-transfers        ; Future transfers of passengers
-  low-prioritiy           ; List of low priority passengers
+  future-transfers        ; Future transfers of passengers#
+  new-ratio
+  max-ratio
+  known-buses-capacity
 ]
 
 extensions [table]
@@ -45,19 +47,25 @@ to init-buses
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
 
   set known-buses []
+  set known-buses-capacity []
   set blacklisted-stops []
   set itinerary []
   set pending-contracts table:make
   set assigned-contracts table:make
   ; XXX: Add new reaction to requests as tasks here
-  set reactions (list (task remember-id) (task add-to-blacklist) (task remove-from-blacklist))
+  set reactions (list (task remember-id) (task remember-size) (task add-to-blacklist) (task remove-from-blacklist))
   ; Infrom other buses in the city that you have been created
   tell-buses-id
+  tell-buses-size known-buses
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
   set bus-itineraries table:make
   set future-transfers table:make
+  
+  set capacity get-capacity
+  set new-ratio 0
+  set max-ratio 0
 end
 
 to execute-actions
@@ -161,36 +169,12 @@ to pick-up-at-station
         ; Check if the passenger could be delivired by another bus with which you are crossing paths anyway
         let selected-transfer get-transfer-bus-for-passenger ?
         if length selected-transfer > 0 and get-remaining-capacity > 0 and not bus-full?
-        ;if length selected-transfer > 0 and get-current-capacity > 0
         [
-          ;show (word "Selected transfer for passenger " ? " at stop " current_stop)
           let transfer-bus-id item 0 selected-transfer
           let transfer-stop item 1 selected-transfer
-          ;let this-itinerary itinerary
-          ;if current_stop != -1
-          ;[
-          ;   set this-itinerary fput current_stop this-itinerary
-          ;]
-          ;let other-itinerary table:get bus-itineraries transfer-bus-id
-          ;show (word "Pick up bus " bus_id " to stop " transfer-stop " with itinerary " this-itinerary ", distance " get-distance-to-itinerary-stop transfer-stop this-itinerary)
-          ;show (word "Transfer bus " transfer-bus-id " from " transfer-stop " to " item 1 ? " with itinerary " other-itinerary ", distance " get-distance-to-itinerary-stop transfer-stop other-itinerary)
           pick-up-passenger passenger-id
           table:put future-transfers passenger-id transfer-stop
         ]
-        ; If bus is not full, carry potentially carry them as low-priority passengers
-        ;[
-          ; Take them on the bus if the distance from this buses' target stop to the passenger destination is lower than from the current stop
-          ; Essentially: Carry them closer to their destination
-        ;  show (word "Obtaining " current_stop "-" passenger-destination)
-        ;  let curr-dist get-stop-distance current_stop passenger-destination
-        ;  show (word "Obtaining " target-stop "-" passenger-destination)
-        ;  let targ-dist get-stop-distance target-stop passenger-destination
-        ;  if curr-dist > targ-dist and not bus-full?
-        ;  [
-        ;     pick-up-passenger passenger-id
-        ;     table:put future-transfers passenger-id target-stop
-        ;  ]
-        ;]
       ]
     ]
   ]
@@ -203,32 +187,8 @@ to pick-up-at-station
      [
        let passenger-id item 0 ?
        let passenger-destination item 1 ?
-       ;let curr-dist get-stop-distance current_stop passenger-destination
-       ;let next-dist get-stop-distance next-up passenger-destination
        let optimal-passenger-route get-path-destination current_stop passenger-destination
-       ;let next-dist length get-path-destination next-up passenger-destination
        if member? next-up optimal-passenger-route and not bus-full?
-       [
-         pick-up-passenger passenger-id
-         table:put future-transfers passenger-id next-up
-       ]
-     ]
-  ]
-  
-  ; Fill up the bus with other passengers at the current stop if it brings them closer to their destination
-  if length itinerary > 0
-  [
-     let next-up item 0 itinerary
-     foreach get-passengers-at-stop current_stop
-     [
-       let passenger-id item 0 ?
-       let passenger-destination item 1 ?
-       ;let curr-dist get-stop-distance current_stop passenger-destination
-       ;let next-dist get-stop-distance next-up passenger-destination
-       let curr-dist get-stop-distance current_stop passenger-destination
-       let next-dist get-stop-distance next-up passenger-destination
-       ;let next-dist length get-path-destination next-up passenger-destination
-       if curr-dist > next-dist and not bus-full?
        [
          pick-up-passenger passenger-id
          table:put future-transfers passenger-id next-up
@@ -264,7 +224,7 @@ to pick-destination
   set max-waiting-stop-tuple lput length get-passengers-at-stop max-waiting-stop max-waiting-stop-tuple
 
   ; Choose the max of "most requested destination at the stop" and "stop with the most waiting people"
-  ifelse item 1 most-requested-tuple > item 1 max-waiting-stop-tuple
+  ifelse item 1 most-requested-tuple  > item 1 max-waiting-stop-tuple ;or (length bus_passengers = 0 and length get-passengers-at-stop current_stop > 0)
   [
       set target-stop item 0 most-requested-tuple
   ]
@@ -277,7 +237,19 @@ to call-in-reinforcements
   ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
   set ratio get-waiting-passengers / count buses
 
-  if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
+  let total-waiting-passengers get-waiting-passengers
+  let available-capacity capacity
+
+  foreach known-buses-capacity
+  [
+    set available-capacity available-capacity + ?
+  ]
+
+  set new-ratio total-waiting-passengers / available-capacity
+
+  ; if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
+  ; if not called-reinforcements? and available-capacity < total-waiting-passengers and ticks-since-init != 0
+  if not called-reinforcements? and new-ratio > 5 and ticks-since-init != 0
   [
     let new-bus-type determine-new-bus-type
     add-bus new-bus-type
@@ -287,6 +259,11 @@ to call-in-reinforcements
     ask buses with [ current_stop = 3 and not initialized? ] [
       init-buses
     ]
+  ]
+
+  if new-ratio > max-ratio
+  [
+    set max-ratio new-ratio
   ]
 end
 
@@ -344,22 +321,25 @@ end
 
 to-report get-max-waiting-stop
   ;; Return out of all stops except the current stop and blacklisted stop, the stop with the max people waiting
-  let max-waiting-stop 3
+  let max-waiting-stop random 24
   let max-waiting-passengers -1
   let bus-stop 0
   let candidate-destination []
 
+  ; Add all the stops as potential canndidates
   while [bus-stop != 23]
   [
     set candidate-destination fput bus-stop candidate-destination
     set bus-stop bus-stop + 1
   ]
 
+  ; Remove stops that are being served by other buses
   foreach blacklisted-stops
   [
     set candidate-destination remove ? candidate-destination
   ]
 
+  ; Get the stop with the most waiting passengers
   foreach candidate-destination
   [
     let waiting-passengers length get-passengers-at-stop ?
@@ -378,26 +358,30 @@ to-report get-most-requested-stop
   let passenger-at-stop get-passengers-at-stop current_stop
   let destination-counter table:make
   let bus-stop-i 0
-  let max-passenger-stop 0
+  let max-passenger-stop random 24
   let max-passenger-stop-count -1
 
+  ; Init request frequencies
   while [bus-stop-i <= 23]
   [
     table:put destination-counter bus-stop-i 0
     set bus-stop-i bus-stop-i + 1
   ]
 
+  ; Aggregate requests
   foreach passenger-at-stop
   [
     let destination-passengers table:get destination-counter item 1 ?
     table:put destination-counter item 1 ? destination-passengers + 1
   ]
 
+  ; Remove current stop
   if table:has-key? destination-counter current_stop
   [
     table:remove destination-counter current_stop
   ]
 
+  ; Find most requested stop
   foreach table:to-list destination-counter
   [
     if item 1 ? > max-passenger-stop-count
