@@ -1,0 +1,41 @@
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                                    VOTING
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+to-report call-vote?
+  ;; Initiate a vote about a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
+  report disappointments / num-pickups > 0.09 ; TODO: Analyze the constant better
+end
+
+to gather-votes
+  ;; Send two-way contracts to other buses asking for their votes
+  let action "ASK-VOTE"
+  let content 0
+  set vote-in-progress? true
+
+  foreach known-buses
+  [
+     send-message-with-contract ? action content (task add-vote)
+  ]
+end
+
+; to-report cast-vote [ request ]
+;   ;; Cast vote on whether to demand a new bus based on current utilization
+;   let action table:get request "action"
+;
+;   if action = "ASK-VOTE"
+;   [
+;      let sender-id table:get request "sender"
+;      let contract-id table:get request "contract-id"
+;
+;      let vote vote-with-disappointment
+;
+;      let response vote
+;
+;      let message create-message contract-id table:get request "contract-from" table:get request "contract-to" sender-id action response
+;      send-message sender-id message
+;      report fulfill-assigned-contract contract-id
+;   ]
+;
+;   report false
+; end

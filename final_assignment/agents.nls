@@ -231,7 +231,6 @@ to pick-up-at-station
   ;   let other-passengers length get-passengers-at-stop current_stop
   ;   show (word "Waiting passengers: " other-passengers)
   ; ]
-
 end
 
 to-report get-passenger-destinations
@@ -426,7 +425,6 @@ to-report get-most-requested-stop
 end
 
 to-report get-pickup-estimate
-
   let temp-count 0
 
   foreach itinerary
@@ -440,7 +438,6 @@ to-report get-pickup-estimate
         ]
     ]
   ]
-
   report temp-count
 end
 
@@ -458,5 +455,4 @@ to-report try-remove-buspassenger
     ]
 
     report removed
-
 end
