@@ -1,4 +1,4 @@
-__includes [ "messaging.nls" "routing.nls" ]
+__includes [ "messaging.nls" "routing.nls" "voting.nls"]
 
 buses-own [
   ; Static, read-only variables. These values never change. You can read them, but you cannot change them.
@@ -20,29 +20,19 @@ buses-own [
   initialized?            ; Flag indicating whether this bus has been initialized yet
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
-  ; path-destination        ; Records the shortest path to the destination XXX:Not used
   blacklisted-stops       ; Records the stops it isn't supposed to use as destination
   capacity                ; Total capacity of bus
   pending-contracts       ; table of open / pending requests to other buses
   assigned-contracts      ; table of requests received by other buses
   reactions               ; List of tasks of function that are used to react to an incoming request by another bus
   known-buses             ; List of other known buses
-
-  still-waiting           ; List of number of passengers still waiting at the stop after pickup indexed by timesteps
-  disappointments         ; List of number of passengers who have destination path stops as final destination
-                          ; who couldn't be picked up because of the bus being full indexed by timesteps
-  bus-fullness            ; List containing the number of passengers in the bus indexed by timesteps
-
-  ; disappointments         ; Number of instances where passengers couldn't be picked up due to bus being full
-  ; num-pickups-full        ; Number of times the bus has called pick destination
-  ; special-bus?            ; Flag indicating whether this bus is a special bus or not
-  ; vote-in-progress?       ; Flag indicating whether the voting is in progress
-
-  ; XXX: Final Tryout variables
+  disappointments         ; List containing amount of waiting passengers who couldn't be picked up in the 3 previous stops
+  bus-fullness            ; List containing amount of passengers in the bus when it departed from 3 previous stops
   passenger-destination-count  ; Table containing the counts of the destination of additional passengers
-  known-buses-capacity
-  new-ratio
-  max-ratio
+  known-buses-capacity    ; List containing the capacity of all the buses in teh field
+  vote-in-progress?       ; Indicator for a voting session that is in progress
+  received-votes          ; Votes received from other buses
+  voting-duration         ; Duration of the current vote in ticks
 ]
 
 extensions [table]
@@ -63,10 +53,8 @@ to init-buses
   set pending-contracts table:make
   set assigned-contracts table:make
   set capacity get-capacity
-  set new-ratio 0
-  set max-ratio 0
   ; XXX: Add new reaction to requests as tasks here
-  set reactions (list (task remember-id) (task remember-size) (task add-to-blacklist) (task remove-from-blacklist))
+  set reactions (list (task remember-id) (task remember-size) (task add-to-blacklist) (task remove-from-blacklist) (task cast-vote))
   ; Infrom other buses in the city that you have been created
   tell-buses-id
   tell-buses-size known-buses
@@ -75,8 +63,7 @@ to init-buses
   set ticks-since-init 0
 
   set disappointments []
-  set bus-fullness []
-  set still-waiting []
+  ; set bus-fullness []
 
   set passenger-destination-count table:make
   let bus-stop-i 0
@@ -85,6 +72,9 @@ to init-buses
     table:put passenger-destination-count bus-stop-i 0
     set bus-stop-i bus-stop-i + 1
   ]
+  set vote-in-progress? false
+  set voting-duration 0
+  set received-votes []
 end
 
 to execute-actions
@@ -184,14 +174,11 @@ to pick-up-at-station
         ]
         [
             set num-removed num-removed + try-remove-passenger
-            ifelse not bus-full?
+            if not bus-full?
             [
                 pick-up-passenger item 0 ?
                 let temp-count table:get passenger-destination-count item 1 ?
                 table:put passenger-destination-count item 1 ? temp-count + 1
-            ]
-            [
-                set current-disappointments current-disappointments + 1
             ]
         ]
     ]
@@ -225,23 +212,27 @@ to pick-up-at-station
 
   set itinerary reverse itinerary
 
-  set disappointments lput current-disappointments disappointments
-  set bus-fullness lput length bus_passengers bus-fullness
-  set still-waiting lput length get-passengers-at-stop current_stop still-waiting
-
-  let passenger-destinations []
-
-  foreach bus_passengers
+  ; Maintain a disappointments list of size 3 which contains the number of passangers who where not satisfied at the current_stop
+  if length disappointments = 3 ;or length bus-fullness = 3
   [
-    set passenger-destinations lput item 1 ? passenger-destinations
+    set disappointments but-first disappointments
+    ; set bus-fullness but-first bus-fullness
   ]
+  set disappointments lput length get-passengers-at-stop current_stop disappointments
+  ; set bus-fullness lput length bus_passengers bus-fullness
+
+  ; let passenger-destinations []
+  ;
+  ; foreach bus_passengers
+  ; [
+  ;   set passenger-destinations lput item 1 ? passenger-destinations
+  ; ]
 
   ; show (word "Itinerary: " itinerary)
   ; show (word "Current Stop: " current_stop)
-  ; show (word "Disappointmented passangers: " last disappointments)
   ; show (word "Capacity of the bus: " get-capacity)
-  ; show (word "Number of Passangers in the bus: " last bus-fullness)
-  ; show (word "Number of waiting passangers: " last still-waiting)
+  ; show (word "Disappointmented passangers: " disappointments)
+  ; show (word "Bus Fullness: " bus-fullness)
   ; show (word "Waiting passangers: " get-passengers-at-stop current_stop)
   ; show (word "Passangers in the bus: " bus_passengers)
   ; show (word "Anticipated pickups: " get-pickup-estimate)
@@ -265,9 +256,8 @@ end
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 to pick-destination
-
+  ;; To pick an optimal destination for the bus
   ; show (word "Blacklist " blacklisted-stops)
-
   let most-requested-tuple get-most-requested-stop
   let max-waiting-stop-tuple []
   let max-waiting-stop get-max-waiting-stop
@@ -321,24 +311,9 @@ to-report get-capacity
   ]
 end
 
-to-report determine-new-bus-type
-  if ratio >= 500
-  [
-    report 3
-  ]
-
-  ifelse ratio > 100 and ratio < 500
-  [
-    report 2
-  ]
-  [
-    report 1
-  ]
-end
-
 to call-in-reinforcements
   ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
-  set ratio get-waiting-passengers / count buses
+  ; set ratio get-waiting-passengers / count buses
 
   let total-waiting-passengers get-waiting-passengers
   let available-capacity capacity
@@ -348,28 +323,66 @@ to call-in-reinforcements
     set available-capacity available-capacity + ?
   ]
 
-  set new-ratio total-waiting-passengers / available-capacity
+  set ratio total-waiting-passengers / available-capacity
 
-  show (word "New-ratio " new-ratio)
-  ; show (word "Max-ratio " max-ratio)
 
-  ; if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
-  ; if not called-reinforcements? and available-capacity < total-waiting-passengers and ticks-since-init != 0
-  if not called-reinforcements? and new-ratio > 5 and ticks-since-init != 0
+  ifelse vote-in-progress?
   [
-    let new-bus-type determine-new-bus-type
-    add-bus new-bus-type
-    set called-reinforcements? true
+    ifelse voting-duration > 5 or voting-finished
+    [
+        let new-bus-type analyze-bus-type-votes
+        show (word "Voting Done -> New bus_type: " new-bus-type)
+        add-bus new-bus-type
+        set called-reinforcements? true
 
-    ; Init a new bus
-    ask buses with [ current_stop = 3 and not initialized? ] [
-      init-buses
+        ; Init a new bus
+        ask buses with [ current_stop = 3 and not initialized? ] [
+          init-buses
+        ]
+        set vote-in-progress? false
+        set voting-duration 0
+        set received-votes []
+    ]
+    [
+        ; show (word "Voting in Progress")
+        set voting-duration voting-duration + 1
     ]
   ]
-
-  if new-ratio > max-ratio
   [
-    set max-ratio new-ratio
+    if not called-reinforcements? and ratio > 5 and ticks-since-init != 0
+    [
+        ; This is the case when the first bus wants to call reinforcements
+        ifelse length known-buses = 0
+        [
+            let bus-type-threshold sum disappointments / length disappointments
+            let new-bus-type 0
+            ifelse bus-type-threshold > 150
+            [
+               set new-bus-type 3
+            ]
+            [
+               ifelse bus-type-threshold > 50 and bus-type-threshold < 150
+               [
+                   set new-bus-type 2
+               ]
+               [
+                   set new-bus-type 1
+               ]
+            ]
+            add-bus new-bus-type
+            set called-reinforcements? true
+
+            ; Init a new bus
+            ask buses with [ current_stop = 3 and not initialized? ] [
+              init-buses
+            ]
+        ]
+        [
+            ; show (word "Initiate Voting")
+            set vote-in-progress? true
+            ask-votes
+        ]
+    ]
   ]
 end
 
@@ -451,24 +464,26 @@ to-report get-most-requested-stop
   report max-passenger-stop-tuple
 end
 
-to-report get-pickup-estimate
-  let temp-count 0
-
-  foreach itinerary
-  [
-    let current-passengers get-passengers-at-stop ?
-    foreach current-passengers
-    [
-        if member? item 1 ? itinerary
-        [
-            set temp-count temp-count + 1
-        ]
-    ]
-  ]
-  report temp-count
-end
+; to-report get-pickup-estimate
+;   ;; Returns the number of estimated passengers to be picked up in the itinerary
+;   let temp-count 0
+;
+;   foreach itinerary
+;   [
+;     let current-passengers get-passengers-at-stop ?
+;     foreach current-passengers
+;     [
+;         if member? item 1 ? itinerary
+;         [
+;             set temp-count temp-count + 1
+;         ]
+;     ]
+;   ]
+;   report temp-count
+; end
 
 to-report get-least-prefered-stop
+    ;; Returns the least prefered stop among the passengers of the bus other than passangers who are in the itinerary
     let min-prefered-stop 24
     let min-prefered-stop-count 200
 
@@ -485,7 +500,7 @@ to-report get-least-prefered-stop
 end
 
 to-report try-remove-passenger
-
+    ;; Removes a less important passenger to give way for a more important passenger
     let removed 0
     let least-prefered-stop get-least-prefered-stop
     ; show (word "Passangers counts "table:to-list passenger-destination-count)
