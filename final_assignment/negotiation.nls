@@ -1,5 +1,5 @@
 to-report determine-unserved-passengers
-  let thres 60
+  let thres 60 
 
 
   let unserved_passengers []
@@ -34,7 +34,7 @@ to-report call-negotiate?
 
   ;report ratio > 50 and ticks-since-negotiate > 45
   let unserved_ratio (length unserved_passengers) / amount_passengers_waiting
-  let negotiate? length unserved_passengers > 20 and ticks-since-negotiate > 45
+  let negotiate? length unserved_passengers > 300 and ticks-since-negotiate > 200
   report negotiate?
 end
 
@@ -42,6 +42,7 @@ to-report negotiating-finished?
   ;; Check whether all the negotiates of the current negotiating have been cast
   report length known-buses = length received-negotiates
 end
+
 
 to gather-negotiates
   ;; Send two-way contracts to other buses asking for their negotiates
@@ -74,13 +75,18 @@ to-report cast-negotiate [ request ]
   [
      let sender-id table:get request "sender"
      let contract-id table:get request "contract-id"
-     ;let negotiate negotiate-with-crowdedness
-     let negotiate negotiate-with-utilization
 
-     let response negotiate
-     ;show (word "negotiating for " negotiate)
-     let message create-message contract-id table:get request "contract-from" table:get request "contract-to" sender-id action response
-     send-message sender-id message
+     ; Don't negotiate when you're already a special bus
+     if not special-bus?
+     [
+       ;     let negotiate negotiate-with-crowdedness
+       let negotiate negotiate-with-utilization
+       
+       let response negotiate
+       ;show (word "negotiating for " negotiate)
+       let message create-message contract-id table:get request "contract-from" table:get request "contract-to" sender-id action response
+       send-message sender-id message
+     ]
      report fulfill-assigned-contract contract-id
   ]
 
@@ -146,30 +152,78 @@ to-report analyze-negotiate-preference
   report assigned_bus_id
 end
 
-to assign-special-bus [assigned_bus_id]
-  ;; Send two-way contracts to other buses asking for their votes
-  let action "ASK-SPECIAL-BUS"
-  let content assigned_bus_id
-
-  foreach known-buses
-  [
-     send-message-with-contract ? action content (task set-special-bus)
-  ]
-end
 
 to-report set-special-bus [ response ]
   ;; Set a bus as special bus
   let assigned_bus_id table:get response "content"
   let action table:get response "action"
+  let contract-id table:get response "contract-id"
 
-  if action = "ASK-NEGOTIATE"
+  if action = "ASK-SPECIAL-BUS"
   [
     if bus_id = assigned_bus_id
     [
       show (word "Setting bus " bus_id " as special bus")
       set special-bus? true
       set ticks-since-special-bus 0
+      report fulfill-assigned-contract contract-id
     ]
   ]
+  report false
+end
 
+to assign-special-bus [ assigned-bus-id ]
+  ;; Send contracts to buses to assign special bus
+  let action "ASK-SPECIAL-BUS"
+  let content assigned-bus-id
+
+  foreach known-buses
+  [
+    send-message-with-oneway-contract ? action content
+  ]
+end
+
+to show-special-buses
+;  show "-------------------SPECIAL BUSES-------------------------"
+  ask buses [if special-bus? [show word "Special bus " bus_id ]]
+end 
+    
+to do-negotiation
+       if call-negotiate? and not negotiate-in-progress?
+     [
+       show "Initating a negotiate"
+       gather-negotiates
+       set negotiate-in-progress? true
+     ]
+
+     ifelse negotiate-in-progress?
+     [
+       ; Also stop negotiate if it takes too long (-> "disappearing negotiates bug")
+       ifelse negotiating-finished? or negotiating-duration > 5
+       [
+         show "negotiating finished, analyze results"
+         let negotiating-result analyze-negotiate-preference
+
+         show (word "Result of negotiation: bus " negotiating-result)
+
+         ;;;;;;;;;;TODO
+         let special-bus-id negotiating-result
+         assign-special-bus special-bus-id
+         
+
+         set received-negotiates []
+         
+         ;; DON'T LET MEDIATOR BUS NEGOTIATE (CANNOT BE SPECIAL BUS)
+         ;set received-negotiates lput (list bus_id negotiate-with-utilization) received-negotiates ; Let the mediator bus negotiate too
+         
+         set negotiate-in-progress? false
+         set ticks-since-negotiate 0
+       ]
+       [
+         set negotiating-duration negotiating-duration + 1
+       ]
+     ]
+     [
+       set ticks-since-negotiate ticks-since-negotiate + 1
+     ]
 end

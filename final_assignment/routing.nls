@@ -144,36 +144,127 @@ to-report get-shortest-path-between [from_station to_station]
 end
 
 to-report get-special-path [unserved_passengers]
-  let still-to-be-visited map [item 2 ?] unserved_passengers
-  let special_itinerary (list current_stop)
+  
+   let special-path 
+   [
+      9 8 6 8 2 8 9 3 ; Amsterdam Noord
+      9 20 12 15 18 15 0 22 21 20 3 ; Amsterdam Oost / Zuid-Oost
+      4 10 13 23 14 23 19 1 7 17 11 16 5 4 3 ;; Amsterdam Zuid / West
+   ]
+   
+   let to-central get-shortest-path-between current_stop 3
+   
+   set special-path sentence to-central special-path 
+   
+   report special-path
+;;  let still-to-be-visited map [item 2 ?] unserved_passengers
+;  let still-to-be-visited []
+;  foreach unserved_passengers
+;  [
+;    let station_i item 2 ?
+;    if not(member? station_i still-to-be-visited)
+;    [
+;      set still-to-be-visited lput station_i still-to-be-visited
+;    ]
+;  ]
+;  let special_itinerary (list current_stop)
+;  
+;  let index 0 
+;  while [length still-to-be-visited > 0]
+;  [
+;    let shortest-intermediate-path []
+;    let shortest-intermediate-length 999999
+;
+;    let min-index 0
+;    foreach still-to-be-visited
+;    [
+;      let from_station 0
+;      ifelse length special_itinerary = 0
+;      [
+;        set from_station current_stop
+;      ]
+;      [ 
+;        set from_station last special_itinerary
+;      ]
+;      let path get-shortest-path-between from_station ?
+;      let quasi-path-length length path
+;      if (quasi-path-length < shortest-intermediate-length)
+;      [
+;        set shortest-intermediate-path path
+;        set shortest-intermediate-length quasi-path-length
+;      ]
+;      set min-index min-index + 1
+;    ]
+;
+;    foreach shortest-intermediate-path
+;    [
+;      set special_itinerary lput ? special_itinerary
+;    ]
+;
+;    set still-to-be-visited remove min-index still-to-be-visited
+;  ]
+;
+;  report special_itinerary
+end
 
-  let index 0 
-  while [length still-to-be-visited > 0]
+to do-routing
+    ; Check if the bus is just initialized
+  ifelse ticks-since-init = 1
   [
-    let shortest-intermediate-path []
-    let shortest-intermediate-length 999999
-
-    let min-index 0
-    foreach still-to-be-visited
-    [
-      let from_station last itinerary
-      let path get-shortest-path-between from_station ?
-      let quasi-path-length length path
-      if (quasi-path-length < shortest-intermediate-length)
-      [
-        set shortest-intermediate-path path
-        set shortest-intermediate-length quasi-path-length
-      ]
-      set min-index min-index + 1
-    ]
-
-    foreach shortest-intermediate-path
-    [
-      set special_itinerary lput ? special_itinerary
-    ]
-
-    set still-to-be-visited remove min-index still-to-be-visited
+      pick-destination ; Pick the initial destination
+      tell-going-to known-buses ; Tell other buses your destination
+      ;show (word "Destination: " target-stop)
+      set itinerary get-path-destination ; Update itinerary with the shortest path to buses destination
+      ;show (word "New Itinerary: " itinerary)
+      pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
   ]
-
-  report special_itinerary
+  [
+    ifelse current_stop = target-stop
+    ; Bus is at a station
+    [
+      ;show (word " Reached destination " current_stop)
+      drop-off-at-station ; Drop off remaining passengers in the bus since it should be the last stop in the itinerary
+      tell-reached ; Tell other buses that you have reached your destination and they can remove that stop from blacklist
+      pick-destination ; Pick new destination
+      tell-going-to known-buses ; Tell others your destination
+      ; show (word "Destination: " target-stop)
+      ifelse special-bus? ;and length itinerary > 0 
+      [
+        if ticks-since-special-bus = 0
+        [
+          set itinerary get-special-path determine-unserved-passengers
+        ]
+          set ticks-since-special-bus ticks-since-special-bus + 1
+        if length itinerary = 1
+        [
+          show (word "Set bus " bus_id " as normal bus.")
+          set special-bus? false
+          set itinerary get-path-destination
+        ]
+      ]
+      [
+        set itinerary get-path-destination
+      ]
+      ;show (word "New Itinerary: " itinerary)
+      pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
+    ]
+    ; Bus is still on the road
+    [
+      ; show (word "Still on road at " current_stop)
+      ; show (word "Next-stop " next_stop)
+      ifelse current_stop = -1
+      [
+        travel-to next_stop
+      ]
+      [
+        ; show (word "Still on road at " current_stop)
+        drop-off-at-station ; Drop off people with intermediate stops as their destination
+        pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
+        let got-to-stop item 0 itinerary ; Initialize next intermediate stop
+        set itinerary remove-item 0 itinerary ; Remove it from the itinerary
+        ; show (word "Go-to-stop " got-to-stop)
+        travel-to got-to-stop ; Initiate the travel
+      ]
+    ]
+  ]
 end

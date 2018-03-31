@@ -137,7 +137,7 @@ to-report vote-with-disappointment
   ;let thresh3 mu + 2 * sigma
   ;show (word "Tresholds: " thresh1 " | " thresh2 " | " thresh3)
   
-  show (word "Disappointment rate: " disappointment-rate)
+;  show (word "Disappointment rate: " disappointment-rate)
   let vote 0
   
   if disappointment-rate > thresh1
@@ -195,7 +195,7 @@ to-report analyze-votes-preference
   table:put votes 2 0
   table:put votes 3 0
   
-  show (word "Votes: " received-votes)
+;  show (word "Votes: " received-votes)
   
   if length received-votes = 0
   [
@@ -259,4 +259,41 @@ to-report get-disappointment-rate [ t ]
   ]
   
   report disappointment-sum / norm-factor
+end
+
+to do-voting
+       ;show (word "Call vote " call-vote? " | In Progress " vote-in-progress? " | Finished " voting-finished? " | Received " length received-votes " | Known " length known-buses)
+     ;show inbox
+     if call-vote? and not vote-in-progress?
+     [
+;       show "Initating a vote"
+       gather-votes
+       set vote-in-progress? true
+     ]
+
+     ifelse vote-in-progress?
+     [
+       ; Also stop vote if it takes too long (-> "disappearing votes bug")
+       ifelse voting-finished? or voting-duration > 5
+       [
+;         show "Voting finished, analyze results"
+         let voting-result analyze-votes-preference
+
+;         show (word "Result of vote was " voting-result)
+         if voting-result > 0
+         [
+           order-bus voting-result
+         ]
+         set received-votes []
+         set received-votes lput vote-with-disappointment received-votes ; Let the mediator bus vote too
+         set vote-in-progress? false
+         set ticks-since-vote 0
+       ]
+       [
+         set voting-duration voting-duration + 1
+       ]
+     ]
+     [
+       set ticks-since-vote ticks-since-vote + 1
+     ]
 end
