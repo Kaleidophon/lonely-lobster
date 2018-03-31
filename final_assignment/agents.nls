@@ -20,7 +20,7 @@ buses-own [
   initialized?            ; Flag indicating whether this bus has been initialized yet
   ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
-  path-destination        ; Records the shortest path to the destination
+  ; path-destination        ; Records the shortest path to the destination XXX:Not used
   blacklisted-stops       ; Records the stops it isn't supposed to use as destination
   capacity                ; Total capacity of bus
   pending-contracts       ; table of open / pending requests to other buses
@@ -37,6 +37,12 @@ buses-own [
   ; num-pickups-full        ; Number of times the bus has called pick destination
   ; special-bus?            ; Flag indicating whether this bus is a special bus or not
   ; vote-in-progress?       ; Flag indicating whether the voting is in progress
+
+  ; XXX: Final Tryout variables
+  passenger-destination-count  ; Table containing the counts of the destination of additional passengers
+  known-buses-capacity
+  new-ratio
+  max-ratio
 ]
 
 extensions [table]
@@ -52,13 +58,18 @@ to init-buses
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
 
   set known-buses []
+  set known-buses-capacity []
   set blacklisted-stops []
   set pending-contracts table:make
   set assigned-contracts table:make
+  set capacity get-capacity
+  set new-ratio 0
+  set max-ratio 0
   ; XXX: Add new reaction to requests as tasks here
-  set reactions (list (task remember-id) (task add-to-blacklist) (task remove-from-blacklist))
+  set reactions (list (task remember-id) (task remember-size) (task add-to-blacklist) (task remove-from-blacklist))
   ; Infrom other buses in the city that you have been created
   tell-buses-id
+  tell-buses-size known-buses
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
@@ -66,6 +77,14 @@ to init-buses
   set disappointments []
   set bus-fullness []
   set still-waiting []
+
+  set passenger-destination-count table:make
+  let bus-stop-i 0
+  while [bus-stop-i <= 23]
+  [
+    table:put passenger-destination-count bus-stop-i 0
+    set bus-stop-i bus-stop-i + 1
+  ]
 end
 
 to execute-actions
@@ -95,7 +114,7 @@ to execute-actions
     ifelse current_stop = target-stop
     ; Bus is at a station
     [
-      ; show (word " Reached destination " current_stop)
+      ; show (word "Reached destination " current_stop)
       drop-off-at-station
       tell-reached
       pick-destination
@@ -137,6 +156,8 @@ to drop-off-at-station
     if item 1 ? = current_stop
     [
       drop-off-passenger item 0 ?
+      let temp-count table:get passenger-destination-count item 1 ?
+      table:put passenger-destination-count item 1 ? temp-count - 1
     ]
   ]
 end
@@ -149,25 +170,6 @@ to pick-up-at-station
 
   set itinerary reverse itinerary
 
-  ; foreach itinerary
-  ; [
-  ;   let stop-i ?
-  ;
-  ;   foreach get-passengers-at-stop current_stop
-  ;   [
-  ;     if item 1 ? = stop-i
-  ;     [
-  ;       ifelse not bus-full?
-  ;       [
-  ;         pick-up-passenger item 0 ?
-  ;       ]
-  ;       [
-  ;         set current-disappointments current-disappointments + 1
-  ;       ]
-  ;     ]
-  ;   ]
-  ; ]
-
   let passenger-at-destination get-passengers-at-stop current_stop
 
   foreach passenger-at-destination
@@ -177,12 +179,16 @@ to pick-up-at-station
         ifelse not bus-full?
         [
             pick-up-passenger item 0 ?
+            let temp-count table:get passenger-destination-count item 1 ?
+            table:put passenger-destination-count item 1 ? temp-count + 1
         ]
         [
-            set num-removed num-removed + try-remove-buspassenger
+            set num-removed num-removed + try-remove-passenger
             ifelse not bus-full?
             [
                 pick-up-passenger item 0 ?
+                let temp-count table:get passenger-destination-count item 1 ?
+                table:put passenger-destination-count item 1 ? temp-count + 1
             ]
             [
                 set current-disappointments current-disappointments + 1
@@ -190,10 +196,29 @@ to pick-up-at-station
         ]
     ]
     [
-        let space-left get-capacity - length bus_passengers - get-pickup-estimate
-        if space-left > 0
+        let space-left get-capacity - length bus_passengers
+        ifelse space-left > 0
         [
             pick-up-passenger item 0 ?
+            let temp-count table:get passenger-destination-count item 1 ?
+            table:put passenger-destination-count item 1 ? temp-count + 1
+        ]
+        [
+            let least-prefered-stop get-least-prefered-stop
+            if least-prefered-stop != 24
+            [
+                let least-prefered-stop-count table:get passenger-destination-count least-prefered-stop
+                if least-prefered-stop-count < table:get passenger-destination-count item 1 ? + 1
+                [
+                    set num-removed num-removed + try-remove-passenger
+                    if not bus-full?
+                    [
+                        pick-up-passenger item 0 ?
+                        let temp-count table:get passenger-destination-count item 1 ?
+                        table:put passenger-destination-count item 1 ? temp-count + 1
+                    ]
+                ]
+            ]
         ]
     ]
   ]
@@ -211,6 +236,8 @@ to pick-up-at-station
     set passenger-destinations lput item 1 ? passenger-destinations
   ]
 
+  ; show (word "Itinerary: " itinerary)
+  ; show (word "Current Stop: " current_stop)
   ; show (word "Disappointmented passangers: " last disappointments)
   ; show (word "Capacity of the bus: " get-capacity)
   ; show (word "Number of Passangers in the bus: " last bus-fullness)
@@ -219,18 +246,6 @@ to pick-up-at-station
   ; show (word "Passangers in the bus: " bus_passengers)
   ; show (word "Anticipated pickups: " get-pickup-estimate)
   ; show (word "Number of removed: " num-removed)
-
-  ; ifelse bus-full?
-  ; [
-  ;   let other-passengers length get-passengers-at-stop current_stop
-  ;   set other-passengers other-passengers - current-disappointments
-  ;   show (word "Unsatisfied destination passengers: " current-disappointments)
-  ;   show (word "Other passengers: " other-passengers)
-  ; ]
-  ; [
-  ;   let other-passengers length get-passengers-at-stop current_stop
-  ;   show (word "Waiting passengers: " other-passengers)
-  ; ]
 end
 
 to-report get-passenger-destinations
@@ -325,7 +340,22 @@ to call-in-reinforcements
   ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
   set ratio get-waiting-passengers / count buses
 
-  if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
+  let total-waiting-passengers get-waiting-passengers
+  let available-capacity capacity
+
+  foreach known-buses-capacity
+  [
+    set available-capacity available-capacity + ?
+  ]
+
+  set new-ratio total-waiting-passengers / available-capacity
+
+  show (word "New-ratio " new-ratio)
+  ; show (word "Max-ratio " max-ratio)
+
+  ; if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
+  ; if not called-reinforcements? and available-capacity < total-waiting-passengers and ticks-since-init != 0
+  if not called-reinforcements? and new-ratio > 5 and ticks-since-init != 0
   [
     let new-bus-type determine-new-bus-type
     add-bus new-bus-type
@@ -335,6 +365,11 @@ to call-in-reinforcements
     ask buses with [ current_stop = 3 and not initialized? ] [
       init-buses
     ]
+  ]
+
+  if new-ratio > max-ratio
+  [
+    set max-ratio new-ratio
   ]
 end
 
@@ -395,14 +430,6 @@ to-report get-most-requested-stop
     table:put destination-counter item 1 ? destination-passengers + 1
   ]
 
-  ; foreach blacklisted-stops
-  ; [
-  ;   if table:has-key? destination-counter ?
-  ;   [
-  ;     table:remove destination-counter ?
-  ;   ]
-  ; ]
-
   if table:has-key? destination-counter current_stop
   [
     table:remove destination-counter current_stop
@@ -441,16 +468,37 @@ to-report get-pickup-estimate
   report temp-count
 end
 
-to-report try-remove-buspassenger
+to-report get-least-prefered-stop
+    let min-prefered-stop 24
+    let min-prefered-stop-count 200
+
+    foreach table:to-list passenger-destination-count
+    [
+      if item 1 ? < min-prefered-stop-count and item 1 ? != 0 and not member? item 0 ? itinerary
+      [
+        set min-prefered-stop-count item 1 ?
+        set min-prefered-stop item 0 ?
+      ]
+    ]
+
+    report min-prefered-stop
+end
+
+to-report try-remove-passenger
 
     let removed 0
+    let least-prefered-stop get-least-prefered-stop
+    ; show (word "Passangers counts "table:to-list passenger-destination-count)
+    ; show (word "Least prefered stop: " least-prefered-stop)
 
     foreach bus_passengers
     [
-        if not member? item 1 ? itinerary and removed = 0
+        if item 1 ? = least-prefered-stop and removed = 0
         [
             drop-off-passenger item 0 ?
             set removed 1
+            let temp-count table:get passenger-destination-count item 1 ?
+            table:put passenger-destination-count item 1 ? temp-count - 1
         ]
     ]
 

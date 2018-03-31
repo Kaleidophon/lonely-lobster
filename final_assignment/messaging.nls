@@ -78,6 +78,20 @@ to tell-buses-id
   ]
 end
 
+to tell-buses-size [other-buses]
+  ;; Have a bus introduce itself after its creation
+
+  let action "TELL-SIZE"
+  let content capacity
+
+  ; Send message to all other buses its size
+  foreach other-buses
+  [
+    send-message-with-oneway-contract ? action content
+  ]
+
+end
+
 to-report update [ response ]
   ;; Verify that the handshake has been successful.
   ;; TODO: This is just to test the messaging logic. Remove later.
@@ -128,6 +142,28 @@ to-report remember-id [ request ]
     let sender-list []
     set sender-list fput sender-id sender-list
     tell-going-to sender-list
+
+    report fulfill-assigned-contract contract-id
+  ]
+
+  report false
+end
+
+to-report remember-size [ request ]
+  let sender-action table:get request "action"
+
+  if sender-action = "TELL-SIZE"
+  [
+    let sender-id table:get request "sender"
+    let contract-id table:get request "contract-id"
+
+    ; Remember id
+    let new-bus-size table:get request "content"
+    set known-buses-capacity fput new-bus-size known-buses
+
+    let sender-list []
+    set sender-list fput sender-id sender-list
+    tell-buses-size sender-list
 
     report fulfill-assigned-contract contract-id
   ]
