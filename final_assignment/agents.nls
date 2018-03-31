@@ -246,12 +246,13 @@ to call-in-reinforcements
   ]
 
   set new-ratio total-waiting-passengers / available-capacity
+  ;show new-ratio
 
   ; if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
   ; if not called-reinforcements? and available-capacity < total-waiting-passengers and ticks-since-init != 0
-  if not called-reinforcements? and new-ratio > 5 and ticks-since-init != 0
+  if not called-reinforcements? and new-ratio > 3 and ticks-since-init != 0
   [
-    let new-bus-type determine-new-bus-type
+    let new-bus-type determine-new-bus-type new-ratio
     add-bus new-bus-type
     set called-reinforcements? true
 
@@ -304,13 +305,13 @@ to-report get-capacity
   ]
 end
 
-to-report determine-new-bus-type
-  if ratio >= 400
+to-report determine-new-bus-type [ metric ] 
+  if metric >= 5
   [
     report 3
   ]
 
-  ifelse ratio > 80 and ratio < 400
+  ifelse metric > 3 and metric < 4
   [
     report 2
   ]

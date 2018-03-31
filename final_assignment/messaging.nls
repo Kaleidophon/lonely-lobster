@@ -61,7 +61,7 @@ to answer-questions
 
 end
 
-to tell-buses-size [other-buses]
+to tell-buses-size [ other-buses ]
   ;; Have a bus introduce itself after its creation
 
   let action "TELL-SIZE"
