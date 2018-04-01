@@ -3,6 +3,7 @@
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 to-report get-path-destination [ from-stop to-stop ]
+  ;; Find the shortest itinerary between two stops
   let bus-stop-i 0
   let distance-to-source table:make ; To store the distance of the shortest path to the source node
   let backtrack table:make ; To keep track of the previous node in the path
@@ -70,88 +71,6 @@ to-report get-path-destination [ from-stop to-stop ]
   report shortest-path
 end
 
-to-report get-pickup-estimate
-  ;; Estimating the number of people that are going to be picked up during the next few stops
-  let temp-count 0
-
-  foreach itinerary
-  [
-    let current-passengers get-passengers-at-stop ?
-    foreach current-passengers
-    [
-        if member? item 1 ? itinerary
-        [
-            set temp-count temp-count + 1
-        ]
-    ]
-  ]
-
-  report temp-count
-end
-
-to-report get-remaining-capacity
-  ;; Return the remaining capacity of the current bus, taking into account passengers at station 
-  ;; of the current itinerary
-  let remaining-capacity get-capacity
-  set remaining-capacity remaining-capacity - length bus_passengers
-  set remaining-capacity remaining-capacity - get-pickup-estimate
-  report remaining-capacity
-end
-
-to-report unpack [ element ]
-  report item 1 element
-end
-
-to-report frequency [i lst]
-  report length filter [? = i] lst
-end
-
-
-to-report get-remaining-capacity2
-  let projected-passengers bus_passengers
-  let projected-capacity length bus_passengers
-  let future-transfer-stops []
-  
-  ;if length table:keys future-transfers > 0
-  ;[
-  ;    set future-transfer-stops map unpack table:to-list future-transfers
-  ;]
-
-  foreach itinerary
-  [
-    let future-stop ?
-    
-    ; Account for people that are boarding the bus at future stops
-    foreach projected-passengers
-    [
-        if future-stop = item 1 ?
-        [ 
-           set projected-capacity projected-capacity - 1
-        ]
-    ]
-    
-    ; Account for people who are leaving the bus at future stops as their final destination
-    let current-passengers get-passengers-at-stop future-stop
-    foreach current-passengers
-    [ 
-        if member? item 1 ? itinerary
-        [
-            set projected-capacity projected-capacity + 1
-            set projected-passengers lput ? projected-passengers
-        ]
-    ]
-    
-    ; Account for people who are leaving the bus at future stops as their transfer stop
-  ]
-  set projected-capacity projected-capacity + length table:keys future-transfers
-  report projected-capacity
-end
-
-to-report get-current-capacity
-  let max-capacity get-capacity
-  report max-capacity - length bus_passengers
-end
-
 to-report get-transfer-bus-for-passenger [ passenger ]
   ;; Get the IDs of all the buses that could potentionally pick up this passengers 
   ;; and get them to their final destination after the current bus dropped them off somewhere
@@ -162,8 +81,6 @@ to-report get-transfer-bus-for-passenger [ passenger ]
   foreach table:keys bus-itineraries
   [
       let other-itinerary table:get bus-itineraries ?
-      ;show (word "This: " itinerary)
-      ;show (word "Other: " other-itinerary)
       let itinerary-set []
       set itinerary-set fput itinerary itinerary-set
       set itinerary-set fput other-itinerary itinerary-set
@@ -183,7 +100,6 @@ to-report get-transfer-bus-for-passenger [ passenger ]
               [
                   report (list ? transfer-stop)
               ]
-              ;report (list ? transfer-stop)
           ]
       ]
   ]
@@ -192,7 +108,8 @@ to-report get-transfer-bus-for-passenger [ passenger ]
 end
 
 to-report intersect [a b]
-   report (filter [ member? ? b ] a)
+  ; Return the intersection of two lists
+  report (filter [ member? ? b ] a)
 end
 
 to-report transfer-tractable? [ transfer-stop other-itinerary ]
@@ -210,15 +127,10 @@ to-report transfer-tractable? [ transfer-stop other-itinerary ]
   
   ; Get distance of other bus to transfer stop
   let other-distance-to-transfer get-distance-to-itinerary-stop transfer-stop other-itinerary
-  
-  ;show (word "(This) Itinerary: " itinerary " |  Stop: " transfer-stop " | Distance: " this-distance-to-transfer)
-  ;show (word "(Other) Itinerary: " other-itinerary " |  Stop: " transfer-stop " | Distance: " other-distance-to-transfer)
-  
+
   if this-distance-to-transfer < other-distance-to-transfer
   [
-    ;show "Insufficient"
     report true
-    ;table:remove possible-transfer-buses ?
   ]
   report false
 end
@@ -259,7 +171,6 @@ to-report get-itinerary-length [ some-itinerary ]
   
   while [ itinerary-i < length some-itinerary ]
   [
-     ;show (word "Dist " item (itinerary-i - 1) some-itinerary "-" item itinerary-i some-itinerary)
      set total-distance total-distance + get-distance (item (itinerary-i - 1) some-itinerary) (item itinerary-i some-itinerary)
      set itinerary-i itinerary-i + 1
   ]
@@ -269,16 +180,9 @@ end
 
 to-report get-stop-distance [ from-stop to-stop ]
   ;; Report the total distance between two stop, taking into account all the stops in between
-  ;show (word "From " from-stop " to " to-stop)
   let itinerary-stops get-path-destination from-stop to-stop
-  
-  ;if item 0 itinerary-stops != from-stop
-  ;[
-  ;   set itinerary-stops fput from-stop itinerary-stops
-  ;]
-  ;show (word "Itinerary: " itinerary-stops)
   let itinerary-distance get-itinerary-length itinerary-stops
-  ;show (word "Distance: " itinerary-distance)
+
   report itinerary-distance
 end
 

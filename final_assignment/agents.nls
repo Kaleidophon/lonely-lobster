@@ -14,25 +14,26 @@ buses-own [
 
   ; New local variables for students.
   ; You can create any new local variable you want. Just declare them here.
+  
+  ; Basic routing variables
   itinerary               ; List of next stations to visit
   target-stop             ; Next stop the bus is driving towards
   called-reinforcements?  ; Flag indicating whether this bus has already called a new bus
   initialized?            ; Flag indicating whether this bus has been initialized yet
-  ratio                   ; Ratio of buses to waiting passengers
   ticks-since-init        ; Records the ticks since the bus has been initialized
   path-destination        ; Records the shortest path to the destination
   blacklisted-stops       ; Records the stops it isn't supposed to use as destination
   capacity                ; Total capacity of bus
+  bus-itineraries         ; Itineraries of other buses
+  future-transfers        ; Future transfers of passengers
+  ratio                   ; Ratio of currently waiting passengers / available seats in the bus fleet
+  known-buses-capacity    ; Known capacity of all buses in the fleet
+  
+  ; Messaging variables
   pending-contracts       ; table of open / pending requests to other buses
   assigned-contracts      ; table of requests received by other buses
   reactions               ; List of tasks of function that are used to react to an incoming request by another bus
   known-buses             ; List of other known buses
-  bus-itineraries         ; Itineraries of other buses
-  future-transfers        ; Future transfers of passengers#
-  new-ratio
-  max-ratio
-  known-buses-capacity
-  approved-transfers
 ]
 
 extensions [table]
@@ -44,29 +45,28 @@ to init-buses
   ; 5: Evertsenstraat, 6: Floradorp, 7: Haarlemmermeerstation, 8: Hasseltweg, 9: Hendrikkade,
   ; 10: Leidseplein, 11: Lelylaan, 12: Muiderpoort, 13: Museumplein, 14: RAI, 15: SciencePark, 16: Sloterdijk,
   ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
-
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
 
+  ; Initializing basic bus variables
   set known-buses []
   set known-buses-capacity []
   set blacklisted-stops []
   set itinerary []
-  set pending-contracts table:make
-  set assigned-contracts table:make
-  ; XXX: Add new reaction to requests as tasks here
-  set reactions (list (task remember-id-size) (task add-to-blacklist) (task remove-from-blacklist) (task update-known-sizes))
-  ; Infrom other buses in the city that you have been created
-  tell-buses-id-size
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
   set bus-itineraries table:make
   set future-transfers table:make
-  
   set capacity get-capacity
-  set new-ratio 0
-  set max-ratio 0
-  set approved-transfers table:make
+  set ratio 0
+  
+  ; Initializing messaging variables
+  set pending-contracts table:make
+  set assigned-contracts table:make
+  set reactions (list (task remember-id-size) (task add-to-blacklist) (task remove-from-blacklist) (task update-known-sizes))
+  
+  ; Tell other buses in the city that you have been created
+  tell-buses-id-size
 end
 
 to execute-actions
@@ -75,6 +75,7 @@ to execute-actions
 
   ; Check if a new bus should be used
   call-in-reinforcements
+  
   ; Update the ticks since the bus was initialized
   set ticks-since-init ticks-since-init + 1
 
@@ -91,32 +92,28 @@ to execute-actions
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
   ]
   [
+    ; Bus is at the target station
     ifelse current_stop = target-stop
-    ; Bus is at a station
     [
       drop-off-at-station ; Drop off remaining passengers in the bus since it should be the last stop in the itinerary
       tell-reached ; Tell other buses that you have reached your destination and they can remove that stop from blacklist
       pick-destination ; Pick new destination
-      ; show (word "Destination: " target-stop)
       set itinerary get-path-destination current_stop target-stop
       tell-going-to known-buses ; Tell others your destination
       pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
     ]
-    ; Bus is still on the road
     [
-      ; show (word "Still on road at " current_stop)
-      ; show (word "Next-stop " next_stop)
+      ; Bus is still on the road
       ifelse current_stop = -1
       [
         travel-to next_stop
       ]
+      ; Bus is at a station which is not the itinerary's final stop
       [
-        ; show (word "Still on road at " current_stop)
         drop-off-at-station ; Drop off people with intermediate stops as their destination
         pick-up-at-station ; Pick up passengers with destination as one of the stops in the itinerary
         let got-to-stop item 0 itinerary ; Initialize next intermediate stop
         set itinerary remove-item 0 itinerary ; Remove it from the itinerary
-        ; show (word "Go-to-stop " got-to-stop)
         travel-to got-to-stop ; Initiate the travel
       ]
     ]
@@ -133,12 +130,15 @@ to drop-off-at-station
   foreach bus_passengers
   [
     let passenger-id item 0 ?
+    
+    ; Drop off regular passengers
     if item 1 ? = current_stop
     [
       drop-off-passenger passenger-id
     ]
     
-    ; Transfer stop dropoff
+    ; Drop of passengers for who a transfer has been determined (or for which this
+    ; stop takes them closer to their final destination)
     if table:has-key? future-transfers passenger-id
     [
        let transfer-stop table:get future-transfers passenger-id
@@ -146,7 +146,6 @@ to drop-off-at-station
        [
            drop-off-passenger passenger-id
            table:remove future-transfers passenger-id
-           ;show (word "Dropping of passenger " passenger-id " at transfer stop " current_stop)
        ]
     ]
   ] 
@@ -154,7 +153,6 @@ end
 
 to pick-up-at-station
   ;; Pick up all the passengers whose destination is in the itinerary
-  set approved-transfers table:make  ; Cache approved transfer for the current station to save computations
   
   foreach itinerary
   [
@@ -164,28 +162,21 @@ to pick-up-at-station
     [
       let passenger-id item 0 ?
       let passenger-destination item 1 ?
-      ifelse not bus-full? and item 1 ? = stop-i
+      
+      ; Pick up a passenger if their destination is on the current itinerary
+      ifelse not bus-full? and passenger-destination = stop-i
       [
         pick-up-passenger passenger-id
       ]
       [
         ; Check if the passenger could be delivired by another bus with which you are crossing paths anyway
-        ifelse member? passenger-destination table:keys approved-transfers and get-remaining-capacity > 0 and not bus-full?
+        let selected-transfer get-transfer-bus-for-passenger ?
+        if length selected-transfer > 0 and not bus-full?
         [
-           let transfer-stop table:get approved-transfers passenger-destination
-           pick-up-passenger passenger-id
-           table:put future-transfers passenger-id transfer-stop
-        ]
-        [
-          let selected-transfer get-transfer-bus-for-passenger ?
-          if length selected-transfer > 0 and get-remaining-capacity > 0 and not bus-full?
-          [
-            let transfer-bus-id item 0 selected-transfer
-            let transfer-stop item 1 selected-transfer
-            pick-up-passenger passenger-id
-            table:put future-transfers passenger-id transfer-stop
-            table:put approved-transfers passenger-destination transfer-stop
-          ]
+          let transfer-bus-id item 0 selected-transfer
+          let transfer-stop item 1 selected-transfer
+          pick-up-passenger passenger-id
+          table:put future-transfers passenger-id transfer-stop
         ]
       ]
     ]
@@ -199,20 +190,14 @@ to pick-up-at-station
      [
        let passenger-id item 0 ?
        let passenger-destination item 1 ?
+       let optimal-passenger-route get-path-destination current_stop passenger-destination
        
-       ifelse member? passenger-destination table:keys approved-transfers and not bus-full?
+       ; A bus brings a passenger closer to their destination if the buses' next stop is on the passengers
+       ; shortest path current-stop -> destination
+       if member? next-up optimal-passenger-route and not bus-full?
        [
          pick-up-passenger passenger-id
          table:put future-transfers passenger-id next-up
-       ]
-       [
-         let optimal-passenger-route get-path-destination current_stop passenger-destination
-         if member? next-up optimal-passenger-route and not bus-full?
-         [
-           pick-up-passenger passenger-id
-           table:put future-transfers passenger-id next-up
-           table:put approved-transfers passenger-destination next-up
-         ]
        ]
      ]
   ]
@@ -235,17 +220,14 @@ end
 ;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 to pick-destination
-
-  ;show (word "Blacklist " blacklisted-stops)
-
+  ;; Pick the next itineraries final stop
   let most-requested-tuple get-most-requested-stop
   let max-waiting-stop-tuple []
   let max-waiting-stop get-max-waiting-stop
-  set max-waiting-stop-tuple fput max-waiting-stop max-waiting-stop-tuple
-  set max-waiting-stop-tuple lput length get-passengers-at-stop max-waiting-stop max-waiting-stop-tuple
+  set max-waiting-stop-tuple (list max-waiting-stop length get-passengers-at-stop max-waiting-stop)
 
   ; Choose the max of "most requested destination at the stop" and "stop with the most waiting people"
-  ifelse item 1 most-requested-tuple  > item 1 max-waiting-stop-tuple ;or (length bus_passengers = 0 and length get-passengers-at-stop current_stop > 0)
+  ifelse item 1 most-requested-tuple  > item 1 max-waiting-stop-tuple
   [
       set target-stop item 0 most-requested-tuple
   ]
@@ -256,24 +238,20 @@ end
 
 to call-in-reinforcements
   ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
-  set ratio get-waiting-passengers / count buses
-
   let total-waiting-passengers get-waiting-passengers
   let available-capacity capacity
 
+  ; Accumulate globally avalailable bus fleet capacity
   foreach known-buses-capacity
   [
     set available-capacity available-capacity + ?
   ]
 
-  set new-ratio total-waiting-passengers / available-capacity
-  ;show new-ratio
+  set ratio total-waiting-passengers / available-capacity
 
-  ; if not called-reinforcements? and ratio > 50 and ticks-since-init > 30
-  ; if not called-reinforcements? and available-capacity < total-waiting-passengers and ticks-since-init != 0
-  if not called-reinforcements? and new-ratio > 3 and ticks-since-init != 0
+  if not called-reinforcements? and ratio > 3 and ticks-since-init != 0
   [
-    let new-bus-type determine-new-bus-type new-ratio
+    let new-bus-type determine-new-bus-type ratio
     add-bus new-bus-type
     set called-reinforcements? true
 
@@ -281,11 +259,6 @@ to call-in-reinforcements
     ask buses with [ current_stop = 3 and not initialized? ] [
       init-buses
     ]
-  ]
-
-  if new-ratio > max-ratio
-  [
-    set max-ratio new-ratio
   ]
 end
 
@@ -327,6 +300,7 @@ to-report get-capacity
 end
 
 to-report determine-new-bus-type [ metric ] 
+  ;; Determine a new bus type based on a certain metric
   if metric >= 5
   [
     report 3

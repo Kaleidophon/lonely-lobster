@@ -235,17 +235,6 @@ to-report remove-from-blacklist [ request ]
   report false
 end
 
-to-report message-test-callback [ response ]
-  ;; Verify that the handshake has been successful.
-  ;; TODO: This is just to test the messaging logic. Remove later.
-
-  let sender table:get response "sender"
-  let content table:get response "content"
-
-  show (word "Bus " sender " says: " content)
-  report true
-end
-
 to send-message-with-contract [ receiver action content callback ]
   ;; Send a message to another bus and create a contract.
   ;; The contract is deemd fulfilled once the bus receives a response from the addressed bus.
