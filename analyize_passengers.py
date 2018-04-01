@@ -4,6 +4,7 @@ import collections
 
 # EXT
 import pandas
+import matplotlib.pyplot as plt
 
 # GLOBALS
 STATIONS = [
@@ -23,11 +24,14 @@ def analyze_rides(passenger_data: pandas.DataFrame):
     ride_frequencies = collections.defaultdict(int)
     from_station_frequencies = collections.defaultdict(int)
     to_station_frequencies = collections.defaultdict(int)
+    time_frequencies = collections.defaultdict(int)
 
     for _, row in passenger_data.iterrows():
         from_station = row["FROM"]
+        time_of_day = row["TIME"]
 
         tos = row[STATIONS]
+        time_frequencies[time_of_day] += sum(tos)
         from_station_frequencies[from_station] += sum(tos)
         to_stations = tos[tos > 0].index  # Extract only visited stations
 
@@ -35,7 +39,18 @@ def analyze_rides(passenger_data: pandas.DataFrame):
             to_station_frequencies[to_station] += tos[to_station]
             ride_frequencies[(from_station, to_station)] += tos[to_station]
 
-    return ride_frequencies, from_station_frequencies, to_station_frequencies
+    return ride_frequencies, from_station_frequencies, to_station_frequencies, time_frequencies
+
+
+def plot_passenger_distribution(time_frequencies):
+    x, y = zip(*time_frequencies.items())
+
+    # Manage figure
+    plt.bar(x, y)
+    plt.ylabel("passengers")
+    plt.xlabel("minutes")
+    plt.xticks([x_ for x_ in x if "00" in x_ and int(x_[0:x_.index(":")]) % 2 == 0])
+    plt.show()
 
 
 def get_busiest_stops(from_station_frequencies, to_station_frequencies, n=10):
@@ -68,7 +83,8 @@ def get_most_busy_routes(ride_frequencies: dict):
 
 
 if __name__ == "__main__":
-    passenger_data = load_passenger_data()
-    ride_freqs, from_station_freqs, to_station_freqs = analyze_rides(passenger_data)
+    passenger_data = load_passenger_data("~/Desktop/passengers-location_day5.csv")
+    ride_freqs, from_station_freqs, to_station_freqs, time_frequencies = analyze_rides(passenger_data)
     get_busiest_stops(from_station_freqs, to_station_freqs)
     get_most_popular_rides(ride_freqs)
+    plot_passenger_distribution(time_frequencies)

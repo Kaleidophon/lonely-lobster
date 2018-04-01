@@ -61,38 +61,99 @@ to answer-questions
 
 end
 
-to tell-buses-id
-  ;; Have a bus introduce itself after its creation
+to tell-buses-id-size
+    let action "TELL-ID-SIZE"
+    let content []
 
-  let action "TELL-ID"
-  let content bus_id
+    set content lput bus_id content
+    set content lput capacity content
 
-  let bus-index 24
+    let bus-index 24
 
-  ; Send message to all other buses
-  while [ bus-index < bus_id ]
+    ; Send message to all other buses
+    while [ bus-index < bus_id ]
+    [
+      send-message-with-oneway-contract bus-index action content
+      set known-buses fput bus-index known-buses
+      set bus-index bus-index + 1
+    ]
+end
+
+to-report remember-id-size [ request ]
+    ;; Introduce oneself with id and size to other buses in the map
+    let sender-action table:get request "action"
+
+    if sender-action = "TELL-ID-SIZE"
+    [
+      let sender-id table:get request "sender"
+      let contract-id table:get request "contract-id"
+
+      ; Remember id
+      let content-list table:get request "content"
+      let new-bus-id first content-list
+      let new-bus-size last content-list
+      set known-buses fput new-bus-id known-buses
+      set known-buses-capacity fput new-bus-size known-buses
+
+      let sender-list []
+      set sender-list fput sender-id sender-list
+      tell-going-to sender-list
+      reply-buses-size sender-list
+
+      report fulfill-assigned-contract contract-id
+    ]
+
+    report false
+end
+
+to reply-buses-size [other-buses]
+  ;; Reply to the bus its size
+
+  let action "REPLY-SIZE"
+  let content capacity
+
+  ; Send message to all other buses its size
+  foreach other-buses
   [
-    send-message-with-oneway-contract bus-index action content
-    set known-buses fput bus-index known-buses
-    set bus-index bus-index + 1
+    send-message-with-oneway-contract ? action content
   ]
 end
 
-to-report update [ response ]
-  ;; Verify that the handshake has been successful.
-  ;; TODO: This is just to test the messaging logic. Remove later.
+to-report update-known-sizes [ request ]
+  ;; Update the known bus sizes with the new size that was sent 
+  let sender-action table:get request "action"
 
-  let sender table:get response "sender"
-  let content table:get response "content"
+  if sender-action = "REPLY-SIZE"
+  [
+    let sender-id table:get request "sender"
+    let contract-id table:get request "contract-id"
 
-  show (word "Bus " sender " says: " content)
-  report true
+    ; Remember id
+    let new-bus-size table:get request "content"
+    set known-buses-capacity fput new-bus-size known-buses
+
+    report fulfill-assigned-contract contract-id
+  ]
+
+  report false
 end
 
-to tell-going-to [other-buses]
-  ;; Have a bus introduce itself after its creation
+to tell-going-to [ other-buses ]
+  ;; Have a bus tell other buses its current itinerary
   let action "TELL-GOING-TO"
-  let content target-stop
+  
+  let future-itinerary itinerary
+  if length future-itinerary = 0
+  [
+    set future-itinerary fput target-stop future-itinerary
+  ]
+  if current_stop != -1
+  [
+    set future-itinerary fput current_stop future-itinerary  ; Include the current stop
+    ;show (word "Future " future-itinerary)
+  ]
+  
+  let content future-itinerary
 
   ; Send message to all other buses
   foreach other-buses
@@ -144,7 +205,11 @@ to-report add-to-blacklist [ request ]
     let contract-id table:get request "contract-id"
 
     ; Add the sender destination to the blacklist
-    let sender-destination table:get request "content"
+    let future-itinerary table:get request "content"
+    let sender-destination item (length future-itinerary - 1) future-itinerary 
+    
+    ; Remember the buses itinerary
+    table:put bus-itineraries sender-id future-itinerary
     set blacklisted-stops fput sender-destination blacklisted-stops
 
     report fulfill-assigned-contract contract-id
@@ -168,17 +233,6 @@ to-report remove-from-blacklist [ request ]
   ]
 
   report false
-end
-
-to-report message-test-callback [ response ]
-  ;; Verify that the handshake has been successful.
-  ;; TODO: This is just to test the messaging logic. Remove later.
-
-  let sender table:get response "sender"
-  let content table:get response "content"
-
-  show (word "Bus " sender " says: " content)
-  report true
 end
 
 to send-message-with-contract [ receiver action content callback ]

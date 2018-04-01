@@ -1,4 +1,9 @@
-to-report get-path-destination
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+;;                                   DISTANCES
+;;:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+to-report get-path-destination [ from-stop to-stop ]
+  ;; Find the shortest itinerary between two stops
   let bus-stop-i 0
   let distance-to-source table:make ; To store the distance of the shortest path to the source node
   let backtrack table:make ; To keep track of the previous node in the path
@@ -57,7 +62,7 @@ to-report get-path-destination
   [
     set backtrack-stop table:get backtrack backtrack-stop
     ; Keep adding the previous node to the shortest path while backtracking to the source
-    if backtrack-stop != current_stop
+    if backtrack-stop != from-stop
     [
       set shortest-path fput backtrack-stop shortest-path
     ]
@@ -67,3 +72,119 @@ to-report get-path-destination
 
   report shortest-path
 end
+
+to-report get-transfer-bus-for-passenger [ passenger ]
+  ;; Get the IDs of all the buses that could potentionally pick up this passengers 
+  ;; and get them to their final destination after the current bus dropped them off somewhere
+  ;; along the way.
+  let passenger-destination item 1 passenger
+  let transfer-buses table:make  ; Table from bus-id -> possible transfer stop
+  
+  foreach table:keys bus-itineraries
+  [
+      let other-itinerary table:get bus-itineraries ?
+      let itinerary-set []
+      set itinerary-set fput itinerary itinerary-set
+      set itinerary-set fput other-itinerary itinerary-set
+      
+      let itinerary-intersection reduce intersect itinerary-set
+      
+      ; A transfer bus is a transfer bus if
+      ; a) The passenger's destination is in the transfer buses' itinerary
+      ; b) If there is an intersection between the current buses' itinerary and the transfer buses' itinerary
+      ; c) If the passenger destinations comes after the transfer stop in the transfer-buses itinerary
+      if length itinerary-intersection > 0
+      [
+          let transfer-stop item 0 itinerary-intersection 
+          if member? passenger-destination other-itinerary and position transfer-stop other-itinerary < position passenger-destination other-itinerary and transfer-stop != current_stop
+          [
+              if transfer-tractable? transfer-stop other-itinerary
+              [
+                  report (list ? transfer-stop)
+              ]
+          ]
+      ]
+  ]
+  
+  report []
+end
+
+to-report intersect [a b]
+  ; Return the intersection of two lists
+  report (filter [ member? ? b ] a)
+end
+
+to-report transfer-tractable? [ transfer-stop other-itinerary ]
+  ;; Having determined buses that could serve as a possible transfer bus at one of the stops
+  ;; on this buses' itinerary, pick a stop that a passenger could be dropped off at for transfer.
+  ;; If none could be found, the passenger shouldn't be picked up.
+  let this-itinerary itinerary
+  if current_stop != -1
+  [
+    set this-itinerary fput current_stop this-itinerary
+  ]
+  
+  ; Get distance of current bus to transfer stop
+  let this-distance-to-transfer get-distance-to-itinerary-stop transfer-stop this-itinerary
+  
+  ; Get distance of other bus to transfer stop
+  let other-distance-to-transfer get-distance-to-itinerary-stop transfer-stop other-itinerary
+
+  if this-distance-to-transfer < other-distance-to-transfer
+  [
+    report true
+  ]
+  report false
+end
+
+to-report get-distance-to-itinerary-stop [ itinerary-stop some-itinerary ]
+  ;; Get the distance of bus from it's current stop to some other stop on its itinerary
+  let distance-to-transfer 0
+  let itinerary-i 0
+  let last-stop -1
+  let reached-transfer? false
+  
+  if item 0 some-itinerary != itinerary-stop
+  [
+    while [ not reached-transfer? and itinerary-i < length some-itinerary ]
+    [
+      let current-itinerary-stop item itinerary-i some-itinerary
+      if itinerary-i > 0 and not reached-transfer?
+      [
+        set distance-to-transfer distance-to-transfer + get-distance last-stop current-itinerary-stop 
+        if current-itinerary-stop = itinerary-stop
+        [
+          set reached-transfer? true
+        ]
+      ]
+      
+      set last-stop current-itinerary-stop
+      set itinerary-i itinerary-i + 1
+    ]
+  ]
+  
+  report distance-to-transfer
+end
+
+to-report get-itinerary-length [ some-itinerary ]
+  ;; Get the total length of an itinerary
+  let total-distance 0
+  let itinerary-i 1
+  
+  while [ itinerary-i < length some-itinerary ]
+  [
+     set total-distance total-distance + get-distance (item (itinerary-i - 1) some-itinerary) (item itinerary-i some-itinerary)
+     set itinerary-i itinerary-i + 1
+  ]
+  
+  report total-distance
+end
+
+to-report get-stop-distance [ from-stop to-stop ]
+  ;; Report the total distance between two stop, taking into account all the stops in between
+  let itinerary-stops get-path-destination from-stop to-stop
+  let itinerary-distance get-itinerary-length itinerary-stops
+
+  report itinerary-distance
+end
+
