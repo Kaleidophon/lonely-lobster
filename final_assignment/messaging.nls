@@ -58,30 +58,57 @@ to answer-questions
       set reaction-index reaction-index + 1
     ]
   ]
-
 end
 
-to tell-buses-id
-  ;; Have a bus introduce itself after its creation
+to tell-buses-id-size
+    let action "TELL-ID-SIZE"
+    let content []
 
-  let action "TELL-ID"
-  let content bus_id
+    set content lput bus_id content
+    set content lput capacity content
 
-  let bus-index 24
+    let bus-index 24
 
-  ; Send message to all other buses
-  while [ bus-index < bus_id ]
-  [
-    send-message-with-oneway-contract bus-index action content
-    set known-buses fput bus-index known-buses
-    set bus-index bus-index + 1
-  ]
+    ; Send message to all other buses
+    while [ bus-index < bus_id ]
+    [
+      send-message-with-oneway-contract bus-index action content
+      set known-buses fput bus-index known-buses
+      set bus-index bus-index + 1
+    ]
 end
 
-to tell-buses-size [other-buses]
-  ;; Have a bus introduce itself after its creation
+to-report remember-id-size [ request ]
+    ;; Introduce oneself with id and size to other buses in the map
+    let sender-action table:get request "action"
 
-  let action "TELL-SIZE"
+    if sender-action = "TELL-ID-SIZE"
+    [
+      let sender-id table:get request "sender"
+      let contract-id table:get request "contract-id"
+
+      ; Remember id
+      let content-list table:get request "content"
+      let new-bus-id first content-list
+      let new-bus-size last content-list
+      set known-buses fput new-bus-id known-buses
+      set known-buses-capacity fput new-bus-size known-buses
+
+      let sender-list []
+      set sender-list fput sender-id sender-list
+      tell-going-to sender-list
+      reply-buses-size sender-list
+
+      report fulfill-assigned-contract contract-id
+    ]
+
+    report false
+end
+
+to reply-buses-size [other-buses]
+  ;; Reply to the bus its size
+
+  let action "REPLY-SIZE"
   let content capacity
 
   ; Send message to all other buses its size
@@ -89,12 +116,10 @@ to tell-buses-size [other-buses]
   [
     send-message-with-oneway-contract ? action content
   ]
-
 end
 
 to-report update [ response ]
   ;; Verify that the handshake has been successful.
-  ;; TODO: This is just to test the messaging logic. Remove later.
 
   let sender table:get response "sender"
   let content table:get response "content"
@@ -127,32 +152,11 @@ to tell-reached
   ]
 end
 
-to-report remember-id [ request ]
+to-report update-known-sizes [ request ]
+  ;; Update the known bus sizes with the new size that was sent 
   let sender-action table:get request "action"
 
-  if sender-action = "TELL-ID"
-  [
-    let sender-id table:get request "sender"
-    let contract-id table:get request "contract-id"
-
-    ; Remember id
-    let new-bus-id table:get request "content"
-    set known-buses fput new-bus-id known-buses
-
-    let sender-list []
-    set sender-list fput sender-id sender-list
-    tell-going-to sender-list
-
-    report fulfill-assigned-contract contract-id
-  ]
-
-  report false
-end
-
-to-report remember-size [ request ]
-  let sender-action table:get request "action"
-
-  if sender-action = "TELL-SIZE"
+  if sender-action = "REPLY-SIZE"
   [
     let sender-id table:get request "sender"
     let contract-id table:get request "contract-id"
@@ -161,10 +165,6 @@ to-report remember-size [ request ]
     let new-bus-size table:get request "content"
     set known-buses-capacity fput new-bus-size known-buses
 
-    let sender-list []
-    set sender-list fput sender-id sender-list
-    tell-buses-size sender-list
-
     report fulfill-assigned-contract contract-id
   ]
 
@@ -172,6 +172,7 @@ to-report remember-size [ request ]
 end
 
 to-report add-to-blacklist [ request ]
+  ;; Add the stop that a buses is going to in the blacklist so that our current bus doesnt go there too
   let sender-action table:get request "action"
 
   if sender-action = "TELL-GOING-TO"
@@ -190,6 +191,7 @@ to-report add-to-blacklist [ request ]
 end
 
 to-report remove-from-blacklist [ request ]
+  ;; Update the blacklist stops when we recieve that the bus service it has reached there
   let sender-action table:get request "action"
 
   if sender-action = "TELL-REACHED"
@@ -208,7 +210,6 @@ end
 
 to-report message-test-callback [ response ]
   ;; Verify that the handshake has been successful.
-  ;; TODO: This is just to test the messaging logic. Remove later.
 
   let sender table:get response "sender"
   let content table:get response "content"

@@ -45,7 +45,7 @@ to-report cast-vote [ request ]
         set vote 3
      ]
      [
-        ifelse bus-type-threshold > 100 and bus-type-threshold < 200
+        ifelse bus-type-threshold > 50 and bus-type-threshold < 200
         [
             set vote 2
         ]
@@ -68,11 +68,26 @@ to-report analyze-bus-type-votes
   ;; Analyze the votes cast and make a decision on the bus_type to order
   let total 0
 
-    foreach received-votes
-    [
-       set total total + ?
-    ]
-    set total total / length received-votes
+  let bus-type-threshold sum disappointments / length disappointments
+  ifelse bus-type-threshold > 200
+  [
+     set total 3
+  ]
+  [
+     ifelse bus-type-threshold > 50 and bus-type-threshold < 200
+     [
+         set total 2
+     ]
+     [
+         set total 1
+     ]
+  ]
+
+  foreach received-votes
+  [
+    set total total + ?
+  ]
+  set total total / (length received-votes + 1)
 
   report ceiling total
 end
