@@ -33,17 +33,18 @@ buses-own [
   vote-in-progress?            ; Indicator for a voting session that is in progress
   received-votes               ; Votes received from other buses
   voting-duration              ; Duration of the current vote in ticks
+  enable-voting?               ; Incicator to enable voting for Bounce++ system and and disable for Bounce system
 ]
 
 extensions [table]
 globals [graph]
 
 to init-buses
-  ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
-  ; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
-  ; 5: Evertsenstraat, 6: Floradorp, 7: Haarlemmermeerstation, 8: Hasseltweg, 9: Hendrikkade,
-  ; 10: Leidseplein, 11: Lelylaan, 12: Muiderpoort, 13: Museumplein, 14: RAI, 15: SciencePark, 16: Sloterdijk,
-  ; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
+  ;; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
+  ;; 0: Amstel, 1: Amstelveenseweg, 2: Buikslotermeer, 3: Centraal, 4: Dam
+  ;; 5: Evertsenstraat, 6: Floradorp, 7: Haarlemmermeerstation, 8: Hasseltweg, 9: Hendrikkade,
+  ;; 10: Leidseplein, 11: Lelylaan, 12: Muiderpoort, 13: Museumplein, 14: RAI, 15: SciencePark, 16: Sloterdijk,
+  ;; 17: Surinameplein, 18: UvA, 19: VU, 20: Waterlooplein, 21: Weesperplein, 22: Wibautstraat, 23: Zuid
 
   set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
 
@@ -53,9 +54,9 @@ to init-buses
   set pending-contracts table:make
   set assigned-contracts table:make
   set capacity get-capacity
-  ; XXX: Add new reaction to requests as tasks here
-  set reactions (list (task remember-id-size) (task add-to-blacklist) (task remove-from-blacklist) (task cast-vote) (task update-known-sizes))
-  ; Infrom other buses in the city that you have been created
+  ;; XXX: Add new reaction to requests as tasks here
+  set reactions (list (task remember-id-size) (task add-to-blacklist) (task remove-from-blacklist) (task tell-vote) (task update-known-sizes))
+  ;; Infrom other buses in the city that you have been created
   tell-buses-id-size
   set called-reinforcements? false
   set initialized? true
@@ -74,22 +75,21 @@ to init-buses
   set vote-in-progress? false
   set voting-duration 0
   set received-votes []
+  ;; XXX: Set it to false to test the Basic Bounce system and true to enable voting and test Bounce++ system
+  set enable-voting? false
 end
 
 to execute-actions
-  ; Add decision making strategies for your agents here.
-  ; You are allowed to use the global variable 'ticks'.
-
-  ; Check if a new bus should be used
+  ;; Check if a new bus should be used
   call-in-reinforcements
-  ; Update the ticks since the bus was initialized
+  ;; Update the ticks since the bus was initialized
   set ticks-since-init ticks-since-init + 1
 
-  ; Message management
+  ;; Message management
   process-inbox
   answer-questions
 
-  ; Check if the bus is just initialized
+  ;; Check if the bus is just initialized
   ifelse ticks-since-init = 1
   [
       pick-destination
@@ -101,7 +101,7 @@ to execute-actions
   ]
   [
     ifelse current_stop = target-stop
-    ; Bus is at a station
+    ;; Bus is at a station
     [
       ; show (word "Reached destination " current_stop)
       drop-off-at-station
@@ -113,7 +113,7 @@ to execute-actions
       ; show (word "New Itinerary: " itinerary)
       pick-up-at-station
     ]
-    ; Bus is still on the road
+    ;; Bus is still on the road
     [
       ; show (word "Still on road at " current_stop)
       ; show (word "Next-stop " next_stop)
@@ -153,17 +153,13 @@ end
 
 to pick-up-at-station
   ;; Pick up all the passengers whose destination is in the itinerary
-
-  let current-disappointments 0  ; Number of passengers that couldn't be picked up at the current station
   let num-removed 0
-
   set itinerary reverse itinerary
-
   let passenger-at-destination get-passengers-at-stop current_stop
 
   foreach passenger-at-destination
   [
-    ; Pickup passangers who have destination as one of the stops in the itinerary
+    ;; Pickup passangers who have destination as one of the stops in the itinerary
     ifelse member? item 1 ? itinerary
     [
         ifelse not bus-full?
@@ -173,7 +169,7 @@ to pick-up-at-station
             table:put passenger-destination-count item 1 ? temp-count + 1
         ]
         [
-            ; Try removing less important passangers to make way for more important passangers
+            ;; Try removing less important passangers to make way for more important passangers
             set num-removed num-removed + try-remove-passenger
             if not bus-full?
             [
@@ -184,7 +180,7 @@ to pick-up-at-station
         ]
     ]
     [
-        ; To increase the utilization of the bus pickup as many passangers as we can
+        ;; To increase the utilization of the bus pickup as many passangers as we can
         let space-left get-capacity - length bus_passengers
         ifelse space-left > 0
         [
@@ -214,7 +210,8 @@ to pick-up-at-station
 
   set itinerary reverse itinerary
 
-  ; Maintain a disappointments list of size 3 which contains the number of passangers who where not satisfied at the current_stop
+  ;; Maintain a disappointments list of size 3 which contains the number of passangers
+  ;; who where not satisfied at the current_stop
   if length disappointments = 3 ;or length bus-fullness = 3
   [
     set disappointments but-first disappointments
@@ -223,7 +220,7 @@ to pick-up-at-station
   set disappointments lput length get-passengers-at-stop current_stop disappointments
   ; set bus-fullness lput length bus_passengers bus-fullness
 
-  ;; Some debug printing. Uncomment if needed.
+  ;; Some debug print statments for checking. Uncomment if needed.
   ; show (word "Itinerary: " itinerary)
   ; show (word "Current Stop: " current_stop)
   ; show (word "Capacity of the bus: " get-capacity)
@@ -231,7 +228,6 @@ to pick-up-at-station
   ; show (word "Bus Fullness: " bus-fullness)
   ; show (word "Waiting passangers: " get-passengers-at-stop current_stop)
   ; show (word "Passangers in the bus: " bus_passengers)
-  ; show (word "Anticipated pickups: " get-pickup-estimate)
   ; show (word "Number of removed: " num-removed)
 end
 
@@ -253,14 +249,14 @@ end
 
 to pick-destination
   ;; To pick an optimal destination for the bus
-  ; show (word "Blacklist " blacklisted-stops)
+  ;; show (word "Blacklist " blacklisted-stops)
   let most-requested-tuple get-most-requested-stop
   let max-waiting-stop-tuple []
   let max-waiting-stop get-max-waiting-stop
   set max-waiting-stop-tuple fput max-waiting-stop max-waiting-stop-tuple
   set max-waiting-stop-tuple lput length get-passengers-at-stop max-waiting-stop max-waiting-stop-tuple
 
-  ; Choose the max of "most requested destination at the stop" and "stop with the most waiting people"
+  ;; Choose the max of "most requested destination at the stop" and "stop with the most waiting people"
   ifelse item 1 most-requested-tuple > item 1 max-waiting-stop-tuple
   [
       set target-stop item 0 most-requested-tuple
@@ -308,7 +304,8 @@ to-report get-capacity
 end
 
 to call-in-reinforcements
-  ;; Call for a new bus in case the current fleet cannot handle all the passengers (only the last bus added can call for a new bus)
+  ;; Call for a new bus in case the current fleet cannot handle all the passengers
+  ;; (only the last bus added can call for a new bus)
 
   let total-waiting-passengers get-waiting-passengers
   let available-capacity capacity + sum known-buses-capacity
@@ -316,37 +313,54 @@ to call-in-reinforcements
   set ratio total-waiting-passengers / available-capacity
 
 
-  ifelse vote-in-progress?
+  ifelse enable-voting?
   [
-    ifelse voting-duration > 5 or voting-finished or length known-buses = 0
+    ;; Bounce++ system with voting to decide the bus_type for new buses
+    ifelse vote-in-progress?
     [
-        let new-bus-type analyze-bus-type-votes
-        show (word "Voting Done -> New bus_type: " new-bus-type)
-        add-bus new-bus-type
-        set called-reinforcements? true
+      ifelse voting-duration > 5 or voting-finished or length known-buses = 0
+      [
+          let new-bus-type analyze-bus-type-votes
+          show (word "Voting Done -> New bus_type: " new-bus-type)
+          add-bus new-bus-type
+          set called-reinforcements? true
 
-        ; Init a new bus
-        ask buses with [ current_stop = 3 and not initialized? ] [
-          init-buses
-        ]
-        set vote-in-progress? false
-        set voting-duration 0
-        set received-votes []
+          ; Init a new bus
+          ask buses with [ current_stop = 3 and not initialized? ] [
+            init-buses
+          ]
+          set vote-in-progress? false
+          set voting-duration 0
+          set received-votes []
+      ]
+      [
+          ; show (word "Voting in Progress")
+          set voting-duration voting-duration + 1
+      ]
     ]
     [
-        ; show (word "Voting in Progress")
-        set voting-duration voting-duration + 1
+      if not called-reinforcements? and ratio > 5 and ticks-since-init != 0
+      [
+          ;; Start voting process if there are more than one bus
+          set vote-in-progress? true
+          if length known-buses != 0
+          [
+              ask-votes
+          ]
+      ]
     ]
   ]
   [
+    ;; Basic Bounce system without voting and uses bus_type=3 for new buses
     if not called-reinforcements? and ratio > 5 and ticks-since-init != 0
     [
-        ; Start voting process if there are more than one bus
-        set vote-in-progress? true
-        if length known-buses != 0
-        [
-            ask-votes
-        ]
+      add-bus 3
+      set called-reinforcements? true
+
+      ;; Init a new bus
+      ask buses with [ current_stop = 3 and not initialized? ] [
+          init-buses
+      ]
     ]
   ]
 end
@@ -390,7 +404,7 @@ to-report get-most-requested-stop
   let max-passenger-stop 0
   let max-passenger-stop-count -1
 
-  ; Add the remaining passengers in the bus too for this calculation
+  ;; Add the remaining passengers in the bus too for this calculation
   foreach bus_passengers
   [
     set passenger-at-stop lput ? passenger-at-stop

@@ -27,7 +27,7 @@ to-report update-votes [ response ]
   report true
 end
 
-to-report cast-vote [ request ]
+to-report tell-vote [ request ]
   ;; Cast vote on which type of bus should be added based on history of disappointments (size 3)
   let action table:get request "action"
 

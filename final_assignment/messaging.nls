@@ -19,48 +19,10 @@
 ;; way around once a contract is send back to its original contractor). Once the target bus has received the message with the
 ;; contract, it performs the steps described above.
 
-to process-inbox
-  ;; Process inbox, generate new assigned contracts for every contract received by another bus
-  while [ length inbox > 0 ]
-  [
-    let current-mail item 0 inbox
-    set inbox remove-item 0 inbox
-    set current-mail item 2 current-mail ; If you send a message, it gets wrapped in another list
-    let contract-id table:get current-mail "contract-id"
-    let contract-to table:get current-mail "contract-to"
 
-    let res fulfill-pending-contract contract-id current-mail
-
-    ; If the current contract hasn't been a response by another bus, it is a contract assignt TO this bus
-    ; So add it as a assigned contract
-    if not res and contract-to = bus_id
-    [
-      add-assigned-contract contract-id current-mail
-    ]
-  ]
-end
-
-to answer-questions
-  ;; Answer requests by other buses
-  ;; Put all the logic a bus uses to react to a certain request here
-  foreach table:keys assigned-contracts
-  [
-    ;; Perform reactions to a message
-    let reacted? false
-    let reaction-index 0
-
-    while [ not reacted? and reaction-index < length reactions ]
-    [
-      let current-reaction item reaction-index reactions
-      let current-contract table:get assigned-contracts ?
-      set reacted? (runresult current-reaction current-contract)
-
-      set reaction-index reaction-index + 1
-    ]
-  ]
-end
 
 to tell-buses-id-size
+    ;; Inform other buses about your id and sizes
     let action "TELL-ID-SIZE"
     let content []
 
@@ -69,7 +31,7 @@ to tell-buses-id-size
 
     let bus-index 24
 
-    ; Send message to all other buses
+    ;; Send message to all other buses
     while [ bus-index < bus_id ]
     [
       send-message-with-oneway-contract bus-index action content
@@ -79,7 +41,7 @@ to tell-buses-id-size
 end
 
 to-report remember-id-size [ request ]
-    ;; Introduce oneself with id and size to other buses in the map
+    ;; Save the id and size of the sender and share your destination and bus size
     let sender-action table:get request "action"
 
     if sender-action = "TELL-ID-SIZE"
@@ -97,7 +59,7 @@ to-report remember-id-size [ request ]
       let sender-list []
       set sender-list fput sender-id sender-list
       tell-going-to sender-list
-      reply-buses-size sender-list
+      tell-bus-size sender-list
 
       report fulfill-assigned-contract contract-id
     ]
@@ -105,10 +67,10 @@ to-report remember-id-size [ request ]
     report false
 end
 
-to reply-buses-size [other-buses]
-  ;; Reply to the bus its size
+to tell-bus-size [other-buses]
+  ;; Reply to the sender bus with sending bus's size
 
-  let action "REPLY-SIZE"
+  let action "TELL-SIZE"
   let content capacity
 
   ; Send message to all other buses its size
@@ -116,16 +78,6 @@ to reply-buses-size [other-buses]
   [
     send-message-with-oneway-contract ? action content
   ]
-end
-
-to-report update [ response ]
-  ;; Verify that the handshake has been successful.
-
-  let sender table:get response "sender"
-  let content table:get response "content"
-
-  ; show (word "Bus " sender " says: " content)
-  report true
 end
 
 to tell-going-to [other-buses]
@@ -153,10 +105,10 @@ to tell-reached
 end
 
 to-report update-known-sizes [ request ]
-  ;; Update the known bus sizes with the new size that was sent 
+  ;; Update the known bus sizes with the new size that was sent
   let sender-action table:get request "action"
 
-  if sender-action = "REPLY-SIZE"
+  if sender-action = "TELL-SIZE"
   [
     let sender-id table:get request "sender"
     let contract-id table:get request "contract-id"
@@ -206,6 +158,57 @@ to-report remove-from-blacklist [ request ]
   ]
 
   report false
+end
+
+to process-inbox
+  ;; Process inbox, generate new assigned contracts for every contract received by another bus
+  while [ length inbox > 0 ]
+  [
+    let current-mail item 0 inbox
+    set inbox remove-item 0 inbox
+    set current-mail item 2 current-mail ; If you send a message, it gets wrapped in another list
+    let contract-id table:get current-mail "contract-id"
+    let contract-to table:get current-mail "contract-to"
+
+    let res fulfill-pending-contract contract-id current-mail
+
+    ; If the current contract hasn't been a response by another bus, it is a contract assignt TO this bus
+    ; So add it as a assigned contract
+    if not res and contract-to = bus_id
+    [
+      add-assigned-contract contract-id current-mail
+    ]
+  ]
+end
+
+to answer-questions
+  ;; Answer requests by other buses
+  ;; Put all the logic a bus uses to react to a certain request here
+  foreach table:keys assigned-contracts
+  [
+    ;; Perform reactions to a message
+    let reacted? false
+    let reaction-index 0
+
+    while [ not reacted? and reaction-index < length reactions ]
+    [
+      let current-reaction item reaction-index reactions
+      let current-contract table:get assigned-contracts ?
+      set reacted? (runresult current-reaction current-contract)
+
+      set reaction-index reaction-index + 1
+    ]
+  ]
+end
+
+to-report update [ response ]
+  ;; Verify that the handshake has been successful.
+
+  let sender table:get response "sender"
+  let content table:get response "content"
+
+  ; show (word "Bus " sender " says: " content)
+  report true
 end
 
 to-report message-test-callback [ response ]
