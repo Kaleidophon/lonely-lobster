@@ -76,7 +76,7 @@ to init-buses
   set voting-duration 0
   set received-votes []
   ;; XXX: Set it to false to test the Basic Bounce system and true to enable voting and test Bounce++ system
-  set enable-voting? false
+  set enable-voting? true
 end
 
 to execute-actions
