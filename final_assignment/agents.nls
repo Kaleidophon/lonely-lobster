@@ -32,6 +32,7 @@ buses-own [
   new-ratio
   max-ratio
   known-buses-capacity
+  approved-transfers
 ]
 
 extensions [table]
@@ -53,10 +54,9 @@ to init-buses
   set pending-contracts table:make
   set assigned-contracts table:make
   ; XXX: Add new reaction to requests as tasks here
-  set reactions (list (task remember-id) (task remember-size) (task add-to-blacklist) (task remove-from-blacklist))
+  set reactions (list (task remember-id-size) (task add-to-blacklist) (task remove-from-blacklist) (task update-known-sizes))
   ; Infrom other buses in the city that you have been created
-  tell-buses-id
-  tell-buses-size known-buses
+  tell-buses-id-size
   set called-reinforcements? false
   set initialized? true
   set ticks-since-init 0
@@ -66,6 +66,7 @@ to init-buses
   set capacity get-capacity
   set new-ratio 0
   set max-ratio 0
+  set approved-transfers table:make
 end
 
 to execute-actions
@@ -153,6 +154,8 @@ end
 
 to pick-up-at-station
   ;; Pick up all the passengers whose destination is in the itinerary
+  set approved-transfers table:make  ; Cache approved transfer for the current station to save computations
+  
   foreach itinerary
   [
     let stop-i ?
@@ -167,13 +170,22 @@ to pick-up-at-station
       ]
       [
         ; Check if the passenger could be delivired by another bus with which you are crossing paths anyway
-        let selected-transfer get-transfer-bus-for-passenger ?
-        if length selected-transfer > 0 and get-remaining-capacity > 0 and not bus-full?
+        ifelse member? passenger-destination table:keys approved-transfers and get-remaining-capacity > 0 and not bus-full?
         [
-          let transfer-bus-id item 0 selected-transfer
-          let transfer-stop item 1 selected-transfer
-          pick-up-passenger passenger-id
-          table:put future-transfers passenger-id transfer-stop
+           let transfer-stop table:get approved-transfers passenger-destination
+           pick-up-passenger passenger-id
+           table:put future-transfers passenger-id transfer-stop
+        ]
+        [
+          let selected-transfer get-transfer-bus-for-passenger ?
+          if length selected-transfer > 0 and get-remaining-capacity > 0 and not bus-full?
+          [
+            let transfer-bus-id item 0 selected-transfer
+            let transfer-stop item 1 selected-transfer
+            pick-up-passenger passenger-id
+            table:put future-transfers passenger-id transfer-stop
+            table:put approved-transfers passenger-destination transfer-stop
+          ]
         ]
       ]
     ]
@@ -187,11 +199,20 @@ to pick-up-at-station
      [
        let passenger-id item 0 ?
        let passenger-destination item 1 ?
-       let optimal-passenger-route get-path-destination current_stop passenger-destination
-       if member? next-up optimal-passenger-route and not bus-full?
+       
+       ifelse member? passenger-destination table:keys approved-transfers and not bus-full?
        [
          pick-up-passenger passenger-id
          table:put future-transfers passenger-id next-up
+       ]
+       [
+         let optimal-passenger-route get-path-destination current_stop passenger-destination
+         if member? next-up optimal-passenger-route and not bus-full?
+         [
+           pick-up-passenger passenger-id
+           table:put future-transfers passenger-id next-up
+           table:put approved-transfers passenger-destination next-up
+         ]
        ]
      ]
   ]
