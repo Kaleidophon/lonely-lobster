@@ -62,9 +62,9 @@ to execute-actions
   set ticks-since-init ticks-since-init + 1
 
   ; Message management
-  process-inbox
-  answer-questions
-  ask-questions
+;  process-inbox
+;  answer-questions
+;  ask-questions
 
   ; Check if itinerary is finished, if yes recreate it
   if length itinerary = 0
